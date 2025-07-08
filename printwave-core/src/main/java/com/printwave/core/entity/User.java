@@ -27,9 +27,21 @@ public class User {
     @Column(nullable = false)
     private String name;
     
+    @Column(nullable = false)
+    private String password;  // Hashed password - never store plain text
+    
+    @Column(name = "phone_number")
+    private String phoneNumber;
+    
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserRole role;
+    
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false;  // Default to false
+    
+    @Column(name = "verification_token")
+    private String verificationToken;  // Token for email verification
     
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
