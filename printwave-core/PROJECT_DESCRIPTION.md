@@ -364,6 +364,92 @@ source ./setLocalEnv.sh
 ./mvnw test -Dtest=DatabaseTestRunner
 ```
 
+### 📋 API Testing Guide (Postman)
+
+#### Prerequisites
+1. **Start Application**: `./mvnw spring-boot:run`
+2. **Base URL**: `http://localhost:8080`
+3. **Content-Type**: `application/json` for all POST requests
+
+#### Test Sequence
+
+**1. User Registration**
+- **Method**: `POST`
+- **URL**: `/api/users/register`
+- **Body**:
+```json
+{
+  "email": "test@example.com",
+  "password": "password123",
+  "name": "Test User",
+  "role": "CUSTOMER"
+}
+```
+- **Expected**: `"User registered successfully. Please check your email for verification."`
+
+**2. Email Verification**
+- **Method**: `GET`
+- **URL**: `/api/users/verify?token=YOUR_TOKEN_FROM_EMAIL`
+- **Expected**: `"Email verified successfully! You can now login."`
+
+**3. User Login**
+- **Method**: `POST`
+- **URL**: `/api/users/login`
+- **Body**:
+```json
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+```
+- **Expected**: `"Login successful! Welcome Test User"`
+
+**4. Password Reset Request**
+- **Method**: `POST`
+- **URL**: `/api/users/request-password-reset`
+- **Body**:
+```json
+{
+  "email": "test@example.com"
+}
+```
+- **Expected**: `"Password reset email sent. Please check your email."`
+
+**5. Password Reset Form (Browser)**
+- **Method**: `GET`
+- **URL**: `/api/users/reset-password?token=YOUR_RESET_TOKEN`
+- **Expected**: HTML form for password reset
+
+**6. Password Reset API**
+- **Method**: `POST`
+- **URL**: `/api/users/reset-password`
+- **Body**:
+```json
+{
+  "token": "YOUR_RESET_TOKEN_FROM_EMAIL",
+  "newPassword": "newPassword123"
+}
+```
+- **Expected**: `"Password reset successful! You can now login with your new password."`
+
+**7. Login with New Password**
+- **Method**: `POST`
+- **URL**: `/api/users/login`
+- **Body**:
+```json
+{
+  "email": "test@example.com",
+  "password": "newPassword123"
+}
+```
+- **Expected**: `"Login successful! Welcome Test User"`
+
+#### Common Issues
+- **Email not received**: Check application logs, verify `.env` credentials
+- **Token not found**: Check logs for generated token, tokens expire after 15 minutes
+- **Spring Security blocking**: Ensure security is disabled in `application.properties`
+- **Response times**: Should be ~200ms thanks to async email processing
+
 ### 📋 Configuration Files
 
 #### Environment Variables (.env)
@@ -480,6 +566,9 @@ DB_PASSWORD=[your_password]
 - Provided clear migration path from HTML forms to frontend redirects
 - Enhanced user experience with immediate functionality and future flexibility
 - Updated PROJECT_DESCRIPTION.md with dual endpoint documentation and migration guide
+- Added comprehensive Postman API testing guide with step-by-step instructions
+- Documented complete test sequence from registration to password reset
+- Included common issues and troubleshooting steps for developers
 
 ---
 
