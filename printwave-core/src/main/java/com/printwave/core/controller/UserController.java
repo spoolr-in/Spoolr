@@ -1,10 +1,12 @@
 package com.printwave.core.controller;
 
 import com.printwave.core.dto.LoginRequest;
+import com.printwave.core.dto.LoginResponse;
 import com.printwave.core.dto.PasswordResetEmailRequest;
 import com.printwave.core.dto.PasswordResetRequest;
 import com.printwave.core.entity.User;
 import com.printwave.core.service.UserService;
+import com.printwave.core.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,9 @@ public class UserController {
     
     @Autowired
     private UserService userService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
     
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@RequestBody User user) {
@@ -35,14 +40,15 @@ public class UserController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-    
     @PostMapping("/login")
-    public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<LoginResponse> loginUser(@RequestBody LoginRequest loginRequest) {
         try {
-            User user = userService.loginUser(loginRequest.getEmail(), loginRequest.getPassword());
-            return ResponseEntity.ok("Login successful! Welcome " + user.getName());
+            String token = userService.loginUser(loginRequest.getEmail(), loginRequest.getPassword());
+            User user = userService.getByEmail(loginRequest.getEmail());
+            LoginResponse response = new LoginResponse(token, user.getEmail(), user.getName(), user.getRole().toString(), user.getId(), "Login successful!");
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(new LoginResponse(null, null, null, null, null, e.getMessage()));
         }
     }
     

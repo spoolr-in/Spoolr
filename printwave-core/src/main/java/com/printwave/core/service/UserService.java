@@ -1,7 +1,9 @@
 package com.printwave.core.service;
 
 import com.printwave.core.entity.User;
+import com.printwave.core.enums.UserRole;
 import com.printwave.core.repository.UserRepository;
+import com.printwave.core.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,9 @@ public class UserService {
     
     @Autowired
     private EmailService emailService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
     
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     
@@ -56,7 +61,7 @@ public class UserService {
         return userRepository.save(user);
     }
     
-    public User loginUser(String email, String password) {
+    public String loginUser(String email, String password) {
         // Find user by email
         User user = userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
@@ -71,7 +76,8 @@ public class UserService {
             throw new RuntimeException("Invalid password");
         }
         
-        return user;
+        // Generate JWT token
+        return jwtUtil.generateToken(user.getEmail(), user.getRole().toString(), user.getId());
     }
     
     @Transactional
@@ -109,5 +115,10 @@ public class UserService {
         user.setPasswordResetExpiry(null);
         
         return userRepository.save(user);
+    }
+    
+    public User getByEmail(String email) {
+        return userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
     }
 }
