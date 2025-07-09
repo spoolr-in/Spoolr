@@ -29,7 +29,38 @@ public class UserService {
         user.setEmailVerified(false);
         user.setVerificationToken(UUID.randomUUID().toString());
         
-        // Save user to database
+    // Save user to database
         return userRepository.save(user);
+    }
+    
+    @Transactional
+    public User verifyEmail(String token) {
+        // Find user by verification token
+        User user = userRepository.findByVerificationToken(token)
+            .orElseThrow(() -> new RuntimeException("Invalid verification token"));
+        
+        // Mark user as verified and clear token
+        user.setEmailVerified(true);
+        user.setVerificationToken(null);
+        
+        return userRepository.save(user);
+    }
+    
+    public User loginUser(String email, String password) {
+        // Find user by email
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
+        
+        // Check if email is verified
+        if (!user.getEmailVerified()) {
+            throw new RuntimeException("Please verify your email before logging in");
+        }
+        
+        // Check password
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new RuntimeException("Invalid password");
+        }
+        
+        return user;
     }
 }

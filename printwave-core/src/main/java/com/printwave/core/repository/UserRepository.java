@@ -20,6 +20,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Check if email already exists (for registration)
     boolean existsByEmail(String email);
     
+    // Find user by verification token (for email verification)
+    Optional<User> findByVerificationToken(String verificationToken);
+    
     // Find users by name containing text (search functionality)
     List<User> findByNameContainingIgnoreCase(String name);
 }
