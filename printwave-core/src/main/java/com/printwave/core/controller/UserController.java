@@ -56,6 +56,83 @@ public class UserController {
         }
     }
     
+    @GetMapping("/reset-password")
+    public ResponseEntity<String> resetPasswordForm(@RequestParam String token) {
+        // This endpoint handles email link clicks and returns HTML form
+        try {
+            // Validate token exists (optional - just check if user exists with this token)
+            // We don't validate expiry here, will be done on form submission
+            
+            String htmlForm = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Reset Password - PrintWave</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; }
+                        .form-group { margin-bottom: 15px; }
+                        label { display: block; margin-bottom: 5px; font-weight: bold; }
+                        input[type="password"] { width: 100%%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+                        button { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; width: 100%%; }
+                        button:hover { background-color: #0056b3; }
+                        .header { text-align: center; color: #333; }
+                    </style>
+                </head>
+                <body>
+                    <h2 class="header">Reset Your Password</h2>
+                    <p>Please enter your new password below:</p>
+                    <form action="/api/users/reset-password" method="post" onsubmit="return submitForm(event)">
+                        <input type="hidden" name="token" value="%s">
+                        <div class="form-group">
+                            <label for="newPassword">New Password:</label>
+                            <input type="password" id="newPassword" name="newPassword" required minlength="6" placeholder="Enter new password">
+                        </div>
+                        <button type="submit">Reset Password</button>
+                    </form>
+                    
+                    <script>
+                        function submitForm(event) {
+                            event.preventDefault();
+                            const form = event.target;
+                            const formData = new FormData(form);
+                            
+                            fetch('/api/users/reset-password', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    token: formData.get('token'),
+                                    newPassword: formData.get('newPassword')
+                                })
+                            })
+                            .then(response => response.text())
+                            .then(data => {
+                                alert(data);
+                                if (data.includes('successful')) {
+                                    window.location.href = '/api/users/login-page';
+                                }
+                            })
+                            .catch(error => {
+                                alert('Error: ' + error.message);
+                            });
+                        }
+                    </script>
+                </body>
+                </html>
+                """.formatted(token);
+            
+            return ResponseEntity.ok()
+                .header("Content-Type", "text/html")
+                .body(htmlForm);
+                
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .header("Content-Type", "text/html")
+                .body("<h2>Invalid or expired reset link</h2><p>" + e.getMessage() + "</p>");
+        }
+    }
+    
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody PasswordResetRequest resetRequest) {
         try {

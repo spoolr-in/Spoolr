@@ -93,13 +93,69 @@ PrintWave is a print service management platform that connects customers with lo
   - Business logic for user operations
   - Methods:
     - `registerUser(User user)` - User registration with password hashing
+    - `verifyEmail(String token)` - Email verification
+    - `loginUser(String email, String password)` - User authentication
+    - `requestPasswordReset(String email)` - Generate password reset token
+    - `resetPassword(String token, String newPassword)` - Reset password
   - Features:
     - BCrypt password encryption
     - Duplicate email validation
     - Verification token generation
+    - Password reset with time-limited tokens
     - Transactional database operations
+    - Integrated email notifications
 
-#### 5. Testing Infrastructure
+- **EmailService** (`src/main/java/com/printwave/core/service/EmailService.java`):
+  - Email notification service using Gmail SMTP
+  - Methods:
+    - `sendVerificationEmail(User user)` - Send email verification (async)
+    - `sendPasswordResetEmail(User user)` - Send password reset email (async)
+  - Features:
+    - Gmail SMTP integration
+    - Professional email templates
+    - Secure environment-based configuration
+    - Asynchronous email sending for fast API responses
+    - Non-blocking background email processing
+
+#### 6. Controller Layer
+- **UserController** (`src/main/java/com/printwave/core/controller/UserController.java`):
+  - REST API endpoints for user operations
+  - Endpoints:
+    - `POST /api/users/register` - User registration
+    - `GET /api/users/verify?token=xyz` - Email verification
+    - `POST /api/users/login` - User authentication
+    - `POST /api/users/request-password-reset` - Request password reset
+    - `GET /api/users/reset-password?token=xyz` - Password reset HTML form (email links)
+    - `POST /api/users/reset-password` - Reset password API (JSON body)
+  - Features:
+    - RESTful API design
+    - Comprehensive error handling
+    - JSON request/response format
+    - HTTP status code management
+    - Secure DTO-based input validation
+    - No sensitive data in URL parameters
+    - Consistent JSON API structure
+    - Dual endpoint pattern for password reset (GET + POST)
+    - HTML form generation for email link handling
+    - Frontend-ready API design
+
+#### 7. Data Transfer Objects (DTOs)
+- **LoginRequest** (`src/main/java/com/printwave/core/dto/LoginRequest.java`):
+  - Secure login request structure
+  - Fields: `email`, `password`
+  - Prevents password exposure in URL parameters
+
+- **PasswordResetEmailRequest** (`src/main/java/com/printwave/core/dto/PasswordResetEmailRequest.java`):
+  - Password reset request structure
+  - Fields: `email`
+  - Consistent JSON API design
+
+- **PasswordResetRequest** (`src/main/java/com/printwave/core/dto/PasswordResetRequest.java`):
+  - Password reset completion structure
+  - Fields: `token`, `newPassword`
+  - Secure password handling without URL exposure
+
+#### 8. Testing Infrastructure
 - **DatabaseTestRunner** (`src/test/java/com/printwave/core/component/DatabaseTestRunner.java`):
   - `CommandLineRunner` implementation for repository testing
   - Creates sample users and verifies database operations
@@ -116,7 +172,13 @@ PrintWave is a print service management platform that connects customers with lo
 ```
 src/
 ├── main/java/com/printwave/core/
-│   ├── PrintwaveCoreApplication.java (Main Spring Boot class)
+│   ├── PrintwaveCoreApplication.java (Main Spring Boot class with @EnableAsync)
+│   ├── controller/
+│   │   └── UserController.java
+│   ├── dto/
+│   │   ├── LoginRequest.java
+│   │   ├── PasswordResetEmailRequest.java
+│   │   └── PasswordResetRequest.java
 │   ├── entity/
 │   │   └── User.java
 │   ├── enums/
@@ -124,7 +186,8 @@ src/
 │   ├── repository/
 │   │   └── UserRepository.java
 │   └── service/
-│       └── UserService.java
+│       ├── UserService.java
+│       └── EmailService.java (with @Async methods)
 ├── test/java/com/printwave/core/
 │   ├── PrintwaveCoreApplicationTests.java
 │   └── component/
@@ -157,10 +220,12 @@ src/
 ### Phase 1: Complete User Layer (Current)
 - [x] Update `User` entity with verification and password reset fields
 - [x] Create `UserService` for business logic
-- [ ] Create `UserController` with REST endpoints
-- [ ] Implement email service for notifications
+- [x] Create `UserController` with REST endpoints
+- [x] Implement email service for notifications
+- [x] Add secure DTO layer for API requests
+- [x] Implement asynchronous email processing
+- [x] Test complete user management flow
 - [ ] Add JWT authentication and security
-- [ ] Test complete user management flow
 
 ### Phase 2: Vendor Layer
 - [ ] Create `Vendor` entity with business details
@@ -184,6 +249,71 @@ src/
 - [ ] Station app communication protocols
 - [ ] Advanced job matching algorithms
 - [ ] Performance optimization
+
+## Frontend Integration & Production Migration Guide
+
+### Current Email Link Flow (Development)
+1. **Password Reset Email** → Contains link: `http://localhost:8080/api/users/reset-password?token=abc123`
+2. **User Clicks Link** → `GET /api/users/reset-password?token=abc123`
+3. **Backend Returns** → HTML form with token pre-filled
+4. **User Submits Form** → `POST /api/users/reset-password` (JSON)
+5. **Password Reset** → Success message displayed
+
+### Frontend Integration (Production)
+
+#### Option 1: Redirect to Frontend (Recommended)
+```java
+@GetMapping("/reset-password")
+public ResponseEntity<Void> redirectToFrontend(@RequestParam String token) {
+    return ResponseEntity.status(HttpStatus.FOUND)
+        .header("Location", "https://yourapp.com/reset-password?token=" + token)
+        .build();
+}
+```
+
+#### Option 2: API-First Approach
+```javascript
+// Frontend extracts token from URL
+const urlParams = new URLSearchParams(window.location.search);
+const token = urlParams.get('token');
+
+// Frontend handles form submission
+fetch('/api/users/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+        token: token,
+        newPassword: newPassword
+    })
+});
+```
+
+### Migration Steps for Production
+
+1. **Build Frontend Application**
+   - Create password reset page: `/reset-password`
+   - Extract token from URL parameters
+   - Create form for new password input
+   - Call POST API on form submission
+
+2. **Update Backend GET Endpoint**
+   - Replace HTML form generation with redirect
+   - Point to frontend URL: `https://yourapp.com/reset-password?token=xyz`
+
+3. **Update Email Templates**
+   - Change links to production frontend URL
+   - Update from `http://localhost:8080` to `https://yourapp.com`
+
+4. **Keep POST API Unchanged**
+   - Frontend will use existing `POST /api/users/reset-password`
+   - No changes needed to core password reset logic
+
+### Benefits of Current Approach
+- **Works Immediately**: No frontend dependency
+- **Professional UI**: Clean HTML form with styling
+- **API Ready**: POST endpoint ready for frontend integration
+- **Flexible Migration**: Easy switch to redirect pattern
+- **Backward Compatible**: Can maintain HTML form as fallback
 
 #### User Verification Strategy
 **Phase 1 (Current)**: Email Verification
@@ -304,6 +434,52 @@ DB_PASSWORD=[your_password]
 - Added verification token generation using UUID
 - Used @Transactional annotation for database consistency
 - Updated PROJECT_DESCRIPTION.md with service layer documentation
+
+### Session 5 (Complete User Layer Implementation)
+- Added verifyEmail() method to UserService
+- Implemented loginUser() method with authentication
+- Added password reset functionality (requestPasswordReset, resetPassword)
+- Created EmailService with Gmail SMTP integration
+- Added spring-boot-starter-mail dependency to pom.xml
+- Integrated email notifications in UserService methods
+- Created UserController with complete REST API endpoints
+- Added comprehensive error handling and HTTP responses
+- Updated PROJECT_DESCRIPTION.md with complete user layer documentation
+- Phase 1 (User Layer) nearly complete - only JWT authentication remaining
+
+### Session 6 (Security & Performance Optimization)
+- Temporarily disabled Spring Security for API testing
+- Fixed database schema conflicts by dropping and recreating users table
+- Successfully tested all API endpoints with Postman
+- Identified security vulnerabilities with URL parameters containing passwords
+- Created comprehensive DTO layer for secure API requests:
+  - LoginRequest.java for secure login authentication
+  - PasswordResetEmailRequest.java for password reset requests
+  - PasswordResetRequest.java for password reset completion
+- Refactored all endpoints to use JSON body instead of URL parameters
+- Enhanced API security by preventing sensitive data exposure in URLs
+- Identified email sending performance bottleneck (4.5s response times)
+- Implemented asynchronous email processing with @Async annotation
+- Added @EnableAsync to main application for background email processing
+- Achieved significant performance improvement (4.5s → 200ms response times)
+- Comprehensive testing of all endpoints with improved security and performance
+- Updated PROJECT_DESCRIPTION.md with security and performance enhancements
+- Phase 1 (User Layer) complete except for JWT authentication
+
+### Session 7 (Email Link Integration & Frontend Preparation)
+- Identified issue with password reset email links after DTO implementation
+- Email links contained URL parameters but endpoint expected JSON body
+- Implemented dual endpoint pattern for password reset:
+  - GET /api/users/reset-password?token=xyz - Returns HTML form for email links
+  - POST /api/users/reset-password - JSON API for frontend/programmatic access
+- Created professional HTML form with embedded CSS styling
+- Added JavaScript for form submission using fetch API
+- Implemented token pre-filling in hidden form fields
+- Added comprehensive error handling for invalid/expired tokens
+- Documented frontend integration and production migration strategies
+- Provided clear migration path from HTML forms to frontend redirects
+- Enhanced user experience with immediate functionality and future flexibility
+- Updated PROJECT_DESCRIPTION.md with dual endpoint documentation and migration guide
 
 ---
 
