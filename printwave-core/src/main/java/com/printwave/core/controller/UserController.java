@@ -1,15 +1,21 @@
 package com.printwave.core.controller;
 
+import com.printwave.core.dto.DashboardResponse;
 import com.printwave.core.dto.LoginRequest;
 import com.printwave.core.dto.LoginResponse;
 import com.printwave.core.dto.PasswordResetEmailRequest;
 import com.printwave.core.dto.PasswordResetRequest;
+import com.printwave.core.dto.ProfileResponse;
 import com.printwave.core.entity.User;
 import com.printwave.core.service.UserService;
 import com.printwave.core.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/users")
@@ -146,6 +152,72 @@ public class UserController {
             return ResponseEntity.ok("Password reset successful! You can now login with your new password.");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+    
+    // Protected endpoint - requires JWT authentication
+    @GetMapping("/profile")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<ProfileResponse> getCurrentUserProfile(Authentication authentication, HttpServletRequest request) {
+        try {
+            // Get user info from JWT token (set by our filter)
+            String userEmail = (String) request.getAttribute("userEmail");
+            Long userId = (Long) request.getAttribute("userId");
+            String userRole = (String) request.getAttribute("userRole");
+            
+            // Alternative: get from Authentication object
+            String emailFromAuth = authentication.getName();
+            
+            // Get full user details from database
+            User user = userService.getByEmail(userEmail);
+            
+            // Return user profile (excluding sensitive data)
+            ProfileResponse response = new ProfileResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getName(),
+                user.getPhoneNumber(),
+                user.getRole().toString(),
+                user.getEmailVerified(),
+                "Profile retrieved successfully!"
+            );
+            
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new ProfileResponse(
+                null, null, null, null, null, null, e.getMessage()
+            ));
+        }
+    }
+    
+    // User dashboard endpoint
+    @GetMapping("/dashboard")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ResponseEntity<DashboardResponse> getUserDashboard(Authentication authentication, HttpServletRequest request) {
+        try {
+            String userEmail = (String) request.getAttribute("userEmail");
+            Long userId = (Long) request.getAttribute("userId");
+            
+            // Get user details for personalized dashboard
+            User user = userService.getByEmail(userEmail);
+            
+            DashboardResponse response = new DashboardResponse(
+                "Welcome to your dashboard!",
+                userEmail,
+                userId,
+                "You have successfully accessed a protected endpoint!"
+            );
+            
+            // Set additional dashboard info
+            response.setWelcomeMessage("Welcome back, " + user.getName() + "!");
+            response.setAccountStatus(user.getEmailVerified() ? "Verified" : "Pending Verification");
+            response.setTotalOrders(0); // TODO: Calculate from orders when implemented
+            
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new DashboardResponse(
+                "Error loading dashboard", null, null, e.getMessage()
+            ));
         }
     }
 }

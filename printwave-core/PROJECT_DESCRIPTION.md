@@ -155,7 +155,48 @@ PrintWave is a print service management platform that connects customers with lo
   - Fields: `token`, `newPassword`
   - Secure password handling without URL exposure
 
-#### 8. Testing Infrastructure
+- **ProfileResponse** (`src/main/java/com/printwave/core/dto/ProfileResponse.java`):
+  - User profile response structure
+  - Fields: `id`, `email`, `name`, `phoneNumber`, `role`, `emailVerified`, `message`
+  - Used by protected profile endpoint
+
+- **DashboardResponse** (`src/main/java/com/printwave/core/dto/DashboardResponse.java`):
+  - User dashboard response structure
+  - Fields: `message`, `email`, `userId`, `details`, `welcomeMessage`, `totalOrders`, `accountStatus`
+  - Enhanced with personalized dashboard information
+
+#### 8. JWT Security Implementation
+- **JwtUtil** (`src/main/java/com/printwave/core/util/JwtUtil.java`):
+  - JWT token generation and validation utility
+  - Methods: `generateToken()`, `validateToken()`, `extractEmail()`, `extractRole()`, `extractUserId()`
+  - Uses HMAC-SHA256 algorithm with configurable secret and expiration
+  - Secure token creation with user claims (email, role, userId)
+
+- **JwtAuthenticationFilter** (`src/main/java/com/printwave/core/security/JwtAuthenticationFilter.java`):
+  - Spring Security filter for automatic JWT validation
+  - Intercepts requests and validates Authorization header
+  - Extracts user information and sets Spring Security context
+  - Adds user attributes to request for easy access in controllers
+
+- **SecurityConfig** (`src/main/java/com/printwave/core/security/SecurityConfig.java`):
+  - Spring Security configuration for JWT authentication
+  - Defines public vs protected endpoints
+  - Configures stateless session management
+  - Enables method-level security with `@PreAuthorize`
+  - CORS configuration for frontend integration
+
+#### 9. Protected Endpoints
+- **GET /api/users/profile** - Get current user profile (requires JWT)
+  - Returns: `ProfileResponse` with user details
+  - Access: `@PreAuthorize("hasRole('CUSTOMER')")` 
+  - Features: Secure user data retrieval, excludes sensitive information
+
+- **GET /api/users/dashboard** - User dashboard (requires JWT)
+  - Returns: `DashboardResponse` with personalized dashboard data
+  - Access: `@PreAuthorize("hasRole('CUSTOMER')")` 
+  - Features: Personalized welcome message, account status, order count
+
+#### 10. Testing Infrastructure
 - **DatabaseTestRunner** (`src/test/java/com/printwave/core/component/DatabaseTestRunner.java`):
   - `CommandLineRunner` implementation for repository testing
   - Creates sample users and verifies database operations
@@ -174,20 +215,28 @@ src/
 ├── main/java/com/printwave/core/
 │   ├── PrintwaveCoreApplication.java (Main Spring Boot class with @EnableAsync)
 │   ├── controller/
-│   │   └── UserController.java
+│   │   └── UserController.java (with protected endpoints)
 │   ├── dto/
+│   │   ├── DashboardResponse.java
 │   │   ├── LoginRequest.java
+│   │   ├── LoginResponse.java
 │   │   ├── PasswordResetEmailRequest.java
-│   │   └── PasswordResetRequest.java
+│   │   ├── PasswordResetRequest.java
+│   │   └── ProfileResponse.java
 │   ├── entity/
 │   │   └── User.java
 │   ├── enums/
 │   │   └── UserRole.java
 │   ├── repository/
 │   │   └── UserRepository.java
-│   └── service/
-│       ├── UserService.java
-│       └── EmailService.java (with @Async methods)
+│   ├── security/
+│   │   ├── JwtAuthenticationFilter.java
+│   │   └── SecurityConfig.java
+│   ├── service/
+│   │   ├── UserService.java
+│   │   └── EmailService.java (with @Async methods)
+│   └── util/
+│       └── JwtUtil.java
 ├── test/java/com/printwave/core/
 │   ├── PrintwaveCoreApplicationTests.java
 │   └── component/
@@ -221,7 +270,7 @@ src/
 
 ## Development Plan (Step-by-Step)
 
-### Phase 1: Complete User Layer (Current)
+### Phase 1: Complete User Layer (COMPLETE ✅)
 - [x] Update `User` entity with verification and password reset fields
 - [x] Create `UserService` for business logic
 - [x] Create `UserController` with REST endpoints
@@ -229,7 +278,10 @@ src/
 - [x] Add secure DTO layer for API requests
 - [x] Implement asynchronous email processing
 - [x] Test complete user management flow
-- [ ] Add JWT authentication and security
+- [x] Add JWT authentication and security
+- [x] Implement JWT security filter and Spring Security configuration
+- [x] Add protected user endpoints (profile, dashboard)
+- [x] Role-based access control with @PreAuthorize
 
 ### Phase 2: Vendor Layer
 - [ ] Create `Vendor` entity with business details
@@ -411,7 +463,40 @@ source ./setLocalEnv.sh
 2. **Base URL**: `http://localhost:8080`
 3. **Content-Type**: `application/json` for all POST requests
 
-#### Test Sequence
+#### JWT Security Testing
+
+**Test 1: Try Protected Endpoint Without Token (Should Fail)**
+- **Method**: `GET`
+- **URL**: `/api/users/profile`
+- **Headers**: None
+- **Expected**: `401 Unauthorized`
+
+**Test 2: Login to Get JWT Token**
+- **Method**: `POST`
+- **URL**: `/api/users/login`
+- **Body**: `{"email": "user@example.com", "password": "password123"}`
+- **Expected**: JWT token in response
+- **Note**: Copy the `token` value for next tests
+
+**Test 3: Access Protected Profile with JWT**
+- **Method**: `GET`
+- **URL**: `/api/users/profile`
+- **Headers**: `Authorization: Bearer YOUR_JWT_TOKEN`
+- **Expected**: User profile data
+
+**Test 4: Access Protected Dashboard with JWT**
+- **Method**: `GET`
+- **URL**: `/api/users/dashboard`
+- **Headers**: `Authorization: Bearer YOUR_JWT_TOKEN`
+- **Expected**: Personalized dashboard data
+
+**Test 5: Try Invalid Token**
+- **Method**: `GET`
+- **URL**: `/api/users/profile`
+- **Headers**: `Authorization: Bearer invalid-token`
+- **Expected**: `401 Unauthorized`
+
+#### Public Endpoints Test Sequence
 
 **1. User Registration**
 - **Method**: `POST`
@@ -619,6 +704,19 @@ DB_PASSWORD=[your_password]
 - Documented clear separation between customer and vendor workflows
 - Updated PROJECT_DESCRIPTION.md with authentication architecture section
 - Ready to implement JWT authentication for User (customer) layer
+
+### Session 9 (JWT Security Implementation - Complete Phase 1)
+- **JWT Utility Implementation**: Created `JwtUtil.java` with token generation and validation
+- **JWT Security Filter**: Implemented `JwtAuthenticationFilter.java` for automatic token validation
+- **Spring Security Configuration**: Created `SecurityConfig.java` for JWT authentication setup
+- **Protected Endpoints**: Added `/api/users/profile` and `/api/users/dashboard` with JWT protection
+- **Role-Based Access Control**: Implemented `@PreAuthorize("hasRole('CUSTOMER')")` annotations
+- **Professional DTOs**: Created `ProfileResponse.java` and `DashboardResponse.java` for structured responses
+- **Security Testing**: Comprehensive JWT security testing via Postman
+- **Documentation Updates**: Updated PROJECT_DESCRIPTION.md with complete JWT implementation details
+- **Phase 1 Complete**: User layer with full JWT authentication system is now production-ready
+- **Architecture Enhancement**: Added security package with proper separation of concerns
+- **Ready for Phase 2**: Vendor layer implementation with separate authentication system
 
 ---
 
