@@ -4,6 +4,7 @@ import com.printwave.core.entity.User;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,6 +13,7 @@ public class EmailService {
     @Autowired
     private JavaMailSender mailSender;
     
+    @Async
     public void sendVerificationEmail(User user) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(user.getEmail());
@@ -25,6 +27,7 @@ public class EmailService {
         mailSender.send(message);
     }
     
+    @Async
     public void sendPasswordResetEmail(User user) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(user.getEmail());
