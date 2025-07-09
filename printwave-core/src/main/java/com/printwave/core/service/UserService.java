@@ -16,6 +16,9 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
     
+    @Autowired
+    private EmailService emailService;
+    
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     
     @Transactional
@@ -31,7 +34,12 @@ public class UserService {
         user.setVerificationToken(UUID.randomUUID().toString());
         
     // Save user to database
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        
+        // Send verification email
+        emailService.sendVerificationEmail(savedUser);
+        
+        return savedUser;
     }
     
     @Transactional
@@ -75,7 +83,12 @@ public class UserService {
         user.setPasswordResetToken(UUID.randomUUID().toString());
         user.setPasswordResetExpiry(LocalDateTime.now().plusMinutes(15));
         
-        return userRepository.save(user);
+        User savedUser = userRepository.save(user);
+        
+        // Send password reset email
+        emailService.sendPasswordResetEmail(savedUser);
+        
+        return savedUser;
     }
     
     @Transactional
