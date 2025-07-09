@@ -7,6 +7,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -62,5 +63,37 @@ public class UserService {
         }
         
         return user;
+    }
+    
+    @Transactional
+    public User requestPasswordReset(String email) {
+        // Find user by email
+        User user = userRepository.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
+        
+        // Generate reset token and set expiry (15 minutes from now)
+        user.setPasswordResetToken(UUID.randomUUID().toString());
+        user.setPasswordResetExpiry(LocalDateTime.now().plusMinutes(15));
+        
+        return userRepository.save(user);
+    }
+    
+    @Transactional
+    public User resetPassword(String token, String newPassword) {
+        // Find user by reset token
+        User user = userRepository.findByPasswordResetToken(token)
+            .orElseThrow(() -> new RuntimeException("Invalid reset token"));
+        
+        // Check if token is expired
+        if (user.getPasswordResetExpiry().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Reset token has expired");
+        }
+        
+        // Update password and clear reset token
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPasswordResetToken(null);
+        user.setPasswordResetExpiry(null);
+        
+        return userRepository.save(user);
     }
 }
