@@ -43,6 +43,12 @@ public class User {
     @Column(name = "verification_token")
     private String verificationToken;  // Token for email verification
     
+    @Column(name = "password_reset_token")
+    private String passwordResetToken;  // Token for password reset
+    
+    @Column(name = "password_reset_expiry")
+    private LocalDateTime passwordResetExpiry;  // Expiry time for password reset token
+    
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

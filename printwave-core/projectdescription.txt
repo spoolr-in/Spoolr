@@ -1,0 +1,56 @@
+# PrintWave Project Description
+
+## Overview
+PrintWave is a cloud-connected print automation platform designed to connect customers needing print services with local print vendors. The system consists of three core modules:
+
+1. **PrintWave Core**: Manages backend business logic and operations.
+2. **PrintWave Portal**: Customer-facing application for document upload and order management.
+3. **PrintWave Station**: Vendor-side application for print shop operations.
+
+## Complete User Workflow
+
+### Customer Journey
+- Sign up and log in on the PrintWave Portal.
+- Upload documents and select desired print options.
+- Choose a print shop or let the system auto-select the best match.
+- Submit the job, sending it to the Station app with all presets.
+- Receive updates and collect printed work from the shop.
+
+### Vendor Journey
+- Register as a business and activate the Station app using a key.
+- Detect and register printer capabilities with the Core app.
+- Manage jobs in the Station app queue with detailed previews.
+- Confirm and print jobs, updating status to complete.
+
+## Development Plan
+
+### Phase 1: User Management
+- Extend User entity with verification and password reset fields.
+- Develop `UserService` and `UserController` for handling user operations.
+- Implement email notifications and JWT-based security.
+
+### Phase 2: Vendor Management
+- Create `Vendor` entity and service layer.
+- Handle business details, activation keys, and pricing.
+- Manage printer capabilities for precise job matching.
+
+### Phase 3: Print Job Management
+- Develop entities and services for tracking print jobs and documents.
+- Implement algorithms to match jobs with vendors based on requirements.
+- Provide job queue management and real-time updates in the Station app.
+
+### Phase 4: Integration Features
+- Integrate a payment gateway and real-time communication tools.
+- Develop protocols for Station app communication.
+- Optimize performance and introduce advanced matching algorithms.
+
+## Database Design
+- Separate tables for `User` and `Vendor` to maintain clean architecture.
+- Additional tables for `PrintJob`, `Document`, and `JobStatus`.
+
+## Summary
+The project aims to provide an efficient and smart way of automating print services by seamlessly connecting customers to vendors. It plans to utilize modern communication technologies and smart matching algorithms for optimal user experiences.
+
+---
+
+This document provides a comprehensive plan and workflow for PrintWave's development and should be updated regularly to reflect the latest project status.

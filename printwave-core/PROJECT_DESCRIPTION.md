@@ -8,6 +8,40 @@ PrintWave is a print service management platform that connects customers with lo
 - **Station App**: Vendor-side application for printer management and auto-discovery
 - **Customer Interface**: (Future) Customer-facing application for placing print orders
 
+## Complete User Workflow ("Uber for Printing")
+
+### Customer Journey:
+1. **Registration & Login**: Customer signs up on Portal
+2. **Upload Document**: Customer uploads PDF/Word file
+3. **Select Print Options**: Choose paper size, color, quantity, finishing options
+4. **Find Print Shops**: System shows nearby print shops with required capabilities
+5. **Choose Shop & Pay**: Customer selects shop and pays online
+6. **Job Submission**: Print job with all presets sent to selected shop's Station app
+7. **Status Updates**: Customer receives notifications about job progress
+8. **Collection**: Customer goes to shop and collects printed documents
+
+### Vendor (Print Shop) Journey:
+1. **Business Registration**: Shop owner registers business details on Portal
+2. **Email Activation**: Receives email with Station app download link + activation key
+3. **Station App Setup**: Downloads, installs, and logs in using activation key
+4. **Printer Auto-Discovery**: Station app detects all connected printers and their capabilities
+5. **Capability Sync**: Printer capabilities and pricing info sent to Core database
+6. **Job Queue Management**: Receives print jobs in Station app queue
+7. **Job Processing**: 
+   - Views job details with customer's presets
+   - Sees print preview with all settings applied
+   - Confirms and prints document
+   - Updates job status to completed
+
+### Core App Responsibilities:
+- **User Management**: Authentication, registration, password reset
+- **Vendor Management**: Business registration, activation key generation
+- **Job Matching**: Match customers with vendors based on capabilities and location
+- **File Storage**: Secure document storage and retrieval
+- **Payment Processing**: Handle online payments
+- **Real-time Communication**: Status updates between Portal and Station apps
+- **Printer Capability Management**: Store and query printer capabilities
+
 ## Vendor Registration Flow
 1. **Core Registration**: Vendor registers with business details via Core App
 2. **Email Activation**: System sends activation key + Station app download link
@@ -35,10 +69,11 @@ PrintWave is a print service management platform that connects customers with lo
 
 #### 3. Entity Layer
 - **User Entity** (`src/main/java/com/printwave/core/entity/User.java`):
-  - Fields: `id`, `email`, `name`, `role`, `createdAt`, `updatedAt`
+  - Fields: `id`, `email`, `name`, `password`, `phoneNumber`, `role`, `emailVerified`, `verificationToken`, `passwordResetToken`, `passwordResetExpiry`, `createdAt`, `updatedAt`
   - JPA annotations: `@Entity`, `@Table`, `@Id`, `@GeneratedValue`
   - Lombok annotations: `@Data` for boilerplate code generation
   - Automatic timestamp management with `@CreationTimestamp` and `@UpdateTimestamp`
+  - Password reset functionality with token-based security
 
 - **UserRole Enum** (`src/main/java/com/printwave/core/enums/UserRole.java`):
   - Values: `CUSTOMER`, `VENDOR`, `ADMIN`
@@ -52,6 +87,17 @@ PrintWave is a print service management platform that connects customers with lo
     - `findByEmail()` returns `Optional<User>`
     - `findByRole()` returns `List<User>`
     - `existsByEmail()` returns `boolean`
+
+#### 5. Service Layer
+- **UserService** (`src/main/java/com/printwave/core/service/UserService.java`):
+  - Business logic for user operations
+  - Methods:
+    - `registerUser(User user)` - User registration with password hashing
+  - Features:
+    - BCrypt password encryption
+    - Duplicate email validation
+    - Verification token generation
+    - Transactional database operations
 
 #### 5. Testing Infrastructure
 - **DatabaseTestRunner** (`src/test/java/com/printwave/core/component/DatabaseTestRunner.java`):
@@ -75,8 +121,10 @@ src/
 │   │   └── User.java
 │   ├── enums/
 │   │   └── UserRole.java
-│   └── repository/
-│       └── UserRepository.java
+│   ├── repository/
+│   │   └── UserRepository.java
+│   └── service/
+│       └── UserService.java
 ├── test/java/com/printwave/core/
 │   ├── PrintwaveCoreApplicationTests.java
 │   └── component/
@@ -87,12 +135,55 @@ src/
 
 ### 🎯 Next Development Steps
 
-#### Immediate (Complete User Layer First)
-- [ ] Update `User` entity with verification fields (`phoneNumber`, `emailVerified`, `verificationToken`)
-- [ ] Create `UserService` for business logic
+## Database Design Strategy
+
+### User Management (Current Focus)
+- **User Table**: Common fields for all user types (customers, vendors, admins)
+- **Fields**: `id`, `email`, `name`, `password`, `role`, `emailVerified`, `verificationToken`, `passwordResetToken`, `passwordResetExpiry`
+
+### Vendor Management (Future)
+- **Vendor Table**: Separate table for vendor-specific information
+- **Relationship**: Foreign key to User table (`user_id`)
+- **Fields**: `activationKey`, `businessDetails`, `printerCapabilities`, `servicePricing`
+- **Reasoning**: Separation of concerns, cleaner logic, easier maintenance
+
+### Print Job Management (Future)
+- **PrintJob Table**: Customer print requests with all specifications
+- **Document Table**: File metadata and storage references
+- **JobStatus Table**: Track job progress through workflow
+
+## Development Plan (Step-by-Step)
+
+### Phase 1: Complete User Layer (Current)
+- [x] Update `User` entity with verification and password reset fields
+- [x] Create `UserService` for business logic
 - [ ] Create `UserController` with REST endpoints
-- [ ] Implement email verification workflow
+- [ ] Implement email service for notifications
+- [ ] Add JWT authentication and security
 - [ ] Test complete user management flow
+
+### Phase 2: Vendor Layer
+- [ ] Create `Vendor` entity with business details
+- [ ] Create `VendorService` for vendor operations
+- [ ] Create `VendorController` for vendor API endpoints
+- [ ] Implement activation key generation and validation
+- [ ] Add printer capability management
+- [ ] Implement pricing structure
+
+### Phase 3: Print Job Management
+- [ ] Create `PrintJob` entity for job tracking
+- [ ] Create `Document` entity for file management
+- [ ] Implement file upload and storage
+- [ ] Add job matching algorithm (vendor selection)
+- [ ] Create job queue management
+- [ ] Add real-time status updates
+
+### Phase 4: Integration Features
+- [ ] Payment gateway integration
+- [ ] Real-time messaging (WebSocket/MQTT)
+- [ ] Station app communication protocols
+- [ ] Advanced job matching algorithms
+- [ ] Performance optimization
 
 #### User Verification Strategy
 **Phase 1 (Current)**: Email Verification
@@ -187,6 +278,32 @@ DB_PASSWORD=[your_password]
 - Created comprehensive PROJECT_DESCRIPTION.md for continuity
 - Decided on verification strategy: Email first, then SMS OTP, then OAuth
 - Planned to complete User layer before moving to Vendor entity
+
+### Session 2 (Password Reset Enhancement)
+- Enhanced User entity with password reset functionality
+- Added `passwordResetToken` field for secure token storage
+- Added `passwordResetExpiry` field for token expiration security
+- Updated PROJECT_DESCRIPTION.md with new field documentation
+- Prepared foundation for password reset service implementation
+
+### Session 3 (Project Architecture Planning)
+- Defined complete "Uber for Printing" workflow
+- Detailed customer journey from upload to collection
+- Specified vendor journey including printer auto-discovery
+- Planned database design strategy with separate User/Vendor tables
+- Created comprehensive 4-phase development plan
+- Documented printer capability management and job queue system
+- Established foundation for Station app integration
+- Ready to begin UserService implementation
+
+### Session 4 (UserService Implementation)
+- Created UserService class with business logic layer
+- Implemented registerUser() method with User entity as input
+- Added BCrypt password hashing for security
+- Implemented duplicate email validation
+- Added verification token generation using UUID
+- Used @Transactional annotation for database consistency
+- Updated PROJECT_DESCRIPTION.md with service layer documentation
 
 ---
 
