@@ -30,6 +30,7 @@ public class UserService {
         
         // Hash password and set additional fields
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRole(UserRole.CUSTOMER);  // Force CUSTOMER role for all registrations
         user.setEmailVerified(false);
         user.setVerificationToken(UUID.randomUUID().toString());
         

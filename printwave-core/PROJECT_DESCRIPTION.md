@@ -201,14 +201,18 @@ src/
 ## Database Design Strategy
 
 ### User Management (Current Focus)
-- **User Table**: Common fields for all user types (customers, vendors, admins)
-- **Fields**: `id`, `email`, `name`, `password`, `role`, `emailVerified`, `verificationToken`, `passwordResetToken`, `passwordResetExpiry`
+- **User Table**: Represents customers using the Portal
+- **Fields**: `id`, `email`, `name`, `password`, `phoneNumber`, `role`, `emailVerified`, `verificationToken`, `passwordResetToken`, `passwordResetExpiry`
+- **Authentication**: Email/password login via Portal
+- **Role**: Always CUSTOMER (User = Customer for this project)
 
 ### Vendor Management (Future)
-- **Vendor Table**: Separate table for vendor-specific information
-- **Relationship**: Foreign key to User table (`user_id`)
-- **Fields**: `activationKey`, `businessDetails`, `printerCapabilities`, `servicePricing`
-- **Reasoning**: Separation of concerns, cleaner logic, easier maintenance
+- **Vendor Table**: Completely separate table for print shop vendors
+- **Fields**: `id`, `email`, `password`, `businessName`, `address`, `activationKey`, `printerCapabilities`, `servicePricing`
+- **Authentication**: Separate login system for Station app (not Portal)
+- **Station App Login**: Uses activation key or separate vendor credentials
+- **Independence**: No relationship to User table - vendors are separate entities
+- **Reasoning**: Clear separation between customer and vendor workflows
 
 ### Print Job Management (Future)
 - **PrintJob Table**: Customer print requests with all specifications
@@ -315,6 +319,42 @@ fetch('/api/users/reset-password', {
 - **Flexible Migration**: Easy switch to redirect pattern
 - **Backward Compatible**: Can maintain HTML form as fallback
 
+## Authentication Architecture
+
+### Current User Authentication (Portal)
+```java
+// Users represent customers using the Portal
+POST /api/users/login
+{
+  "email": "customer@example.com",
+  "password": "password123"
+}
+// Returns JWT token for Portal access
+```
+
+### Future Vendor Authentication (Station App)
+```java
+// Vendors use separate authentication system
+POST /api/vendors/login
+{
+  "email": "vendor@printshop.com",
+  "password": "password123"
+}
+// OR activation key login
+POST /api/vendors/station-login
+{
+  "activationKey": "abc123def456"
+}
+// Returns JWT token for Station app access
+```
+
+### Key Design Decisions
+- **User = Customer**: All users in User table represent Portal customers
+- **Separate Vendor Table**: Vendors are completely independent entities
+- **Different Login Systems**: Portal vs Station app authentication
+- **No Role Confusion**: User table always contains customers
+- **Clear Separation**: No shared authentication between customers and vendors
+
 #### User Verification Strategy
 **Phase 1 (Current)**: Email Verification
 - Free email verification using SMTP
@@ -381,11 +421,11 @@ source ./setLocalEnv.sh
 {
   "email": "test@example.com",
   "password": "password123",
-  "name": "Test User",
-  "role": "CUSTOMER"
+  "name": "Test User"
 }
 ```
 - **Expected**: `"User registered successfully. Please check your email for verification."`
+- **Note**: Role is automatically set to CUSTOMER
 
 **2. Email Verification**
 - **Method**: `GET`
@@ -569,6 +609,16 @@ DB_PASSWORD=[your_password]
 - Added comprehensive Postman API testing guide with step-by-step instructions
 - Documented complete test sequence from registration to password reset
 - Included common issues and troubleshooting steps for developers
+
+### Session 8 (Architecture Clarification & Design Decisions)
+- Clarified User vs Vendor table architecture and authentication systems
+- Decided User table represents Portal customers only (User = Customer)
+- Planned separate Vendor table for print shop vendors (independent entities)
+- Established different login systems: Portal (email/password) vs Station (activation key)
+- Removed role confusion by treating User table as customer-only
+- Documented clear separation between customer and vendor workflows
+- Updated PROJECT_DESCRIPTION.md with authentication architecture section
+- Ready to implement JWT authentication for User (customer) layer
 
 ---
 
