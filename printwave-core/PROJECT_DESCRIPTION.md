@@ -5,30 +5,313 @@ PrintWave is a print service management platform that connects customers with lo
 
 ## System Architecture
 - **Core App**: Backend service handling vendor registration, user management, and business logic
+- **Portal App**: Customer-facing web application for placing print orders
 - **Station App**: Vendor-side application for printer management and auto-discovery
-- **Customer Interface**: (Future) Customer-facing application for placing print orders
+
+## Application Components
+
+### 1. Core App (Backend API)
+**Technology**: Spring Boot, PostgreSQL, JWT Authentication
+**Port**: 8080
+**Responsibilities**:
+- User management (registration, login, JWT authentication)
+- Vendor management (business registration, activation keys)
+- Print job processing and routing
+- File storage and document management
+- Payment processing coordination
+- Real-time job status updates
+- Distance-based vendor matching
+- Email notifications (verification, activation)
+
+**Key APIs**:
+```java
+// User Management
+POST /api/users/register
+POST /api/users/login
+GET /api/users/profile (JWT protected)
+
+// Vendor Management
+POST /api/vendors/register
+GET /api/vendors/verify-email
+POST /api/vendors/station-login
+
+// Print Jobs - Online (Registered Users Only)
+POST /api/jobs/upload (JWT required)
+GET /api/jobs/history (JWT required)
+
+// Print Jobs - QR Code Anonymous
+GET /store/{storeCode}
+POST /api/jobs/qr-anonymous-upload
+GET /api/jobs/status/{trackingCode}
+
+// Vendor Operations
+POST /api/vendors/toggle-store
+GET /api/vendors/job-queue
+POST /api/jobs/accept
+POST /api/jobs/complete
+```
+
+### 2. Portal App (Frontend)
+**Technology**: React/Vue.js/Angular + Maps Integration
+**URL**: https://printwave.com
+**Responsibilities**:
+- Customer registration and login interface
+- Vendor business registration forms
+- Document upload and print options selection
+- Store location and selection (with maps)
+- Payment processing interface
+- Order tracking and history
+- QR code landing pages
+- Responsive design for mobile/desktop
+
+**Key Pages**:
+```javascript
+// Customer Pages
+/login                    // Customer login
+/register                 // Customer registration
+/dashboard                // Customer dashboard
+/upload                   // Document upload (logged in)
+/orders                   // Order history
+/store/{storeCode}        // QR code landing page
+
+// Vendor Pages
+/vendor/register          // Vendor registration
+/vendor/dashboard         // Vendor management
+/vendor/profile           // Business profile
+
+// Anonymous Pages
+/                         // Homepage
+/about                    // About page
+/contact                  // Contact page
+```
+
+### 3. Station App (Vendor Desktop App)
+**Technology**: Electron/Java Desktop App
+**Responsibilities**:
+- Vendor authentication via activation key
+- Printer auto-discovery and capability detection
+- Real-time job queue management
+- Store open/close toggle
+- Job acceptance and completion
+- Print job processing and status updates
+- Local printer communication
+- Sync printer capabilities to Core API
+
+**Key Features**:
+```javascript
+// Authentication
+- Login with activation key
+- Secure connection to Core API
+
+// Printer Management
+- Auto-detect connected printers
+- Report printer capabilities (paper sizes, color, duplex)
+- Monitor printer status (online/offline)
+- Send capabilities to Core API
+
+// Job Management
+- Real-time job queue display
+- Job details view (document, options, price)
+- Accept/reject job functionality
+- Print job execution
+- Mark jobs as completed
+
+// Store Management
+- Open/close store toggle
+  - Field: `isStoreOpen` (true/false)
+  - Last toggled: `storeStatusUpdatedAt` (timestamp)
+- Store status synchronization
+- Earnings and statistics display
+```
 
 ## Complete User Workflow ("Uber for Printing")
 
-### Customer Journey:
-1. **Registration & Login**: Customer signs up on Portal
-2. **Upload Document**: Customer uploads PDF/Word file
-3. **Select Print Options**: Choose paper size, color, quantity, finishing options
-4. **Find Print Shops**: System shows nearby print shops with required capabilities
-5. **Choose Shop & Pay**: Customer selects shop and pays online
-6. **Job Submission**: Print job with all presets sent to selected shop's Station app
-7. **Status Updates**: Customer receives notifications about job progress
-8. **Collection**: Customer goes to shop and collects printed documents
+### 1. Registered Customer Flow (Online Portal)
+**Requirements**: Must create account and login
+**Payment**: Online payment required
+**Risk**: Low (customer details + pre-payment)
 
-### Vendor (Print Shop) Journey:
-1. **Business Registration**: Shop owner registers business details on Portal
-2. **Email Activation**: Receives email with Station app download link + activation key
-3. **Station App Setup**: Downloads, installs, and logs in using activation key
-4. **Printer Auto-Discovery**: Station app detects all connected printers and their capabilities
-5. **Capability Sync**: Printer capabilities and pricing info sent to Core database
-6. **Job Queue Management**: Receives print jobs in Station app queue
-7. **Job Processing**: 
-   - Views job details with customer's presets
+```
+🌐 Customer visits printwave.com
+🔐 Must login or create account (no anonymous option)
+📄 Uploads document (PDF/Word/Image)
+📍 System detects location or customer enters address
+🏪 Shows nearby stores with capabilities and ratings
+🎯 Selects preferred store
+⚙️ Configures print options (paper size, color, sides, copies)
+💰 Sees calculated price
+💳 Pays online with saved payment method
+📧 Receives email confirmation with tracking info
+📱 Gets push notification when job is ready
+🚗 Drives to store
+📱 Shows order confirmation to staff
+📄 Collects printed documents
+⭐ Rates store experience
+📊 Order saved to customer history
+```
+
+### 2. Anonymous Customer Flow (QR Code Only)
+**Requirements**: Must be physically present at store
+**Payment**: Pay at store (cash/card)
+**Risk**: Low (customer physically present)
+
+```
+🏪 Customer physically at ABC Print Shop
+📱 Scans QR code on store counter
+🌐 Opens: https://printwave.com/store/PW0001
+📝 Sees options: [Sign In] [Create Account] [Continue Without Account]
+📱 Clicks "Continue Without Account"
+📄 Uploads document
+⚙️ Selects print options
+💰 Sees price calculation
+🎫 Receives tracking code: "PJ123456"
+📋 Job instantly appears in store's Station app
+⏱️ Waits 5-10 minutes while document prints
+🎫 Shows tracking code "PJ123456" to staff
+💳 Pays at store (cash/card)
+📄 Collects printed document
+✅ Complete (no account needed)
+```
+
+### 3. Vendor Registration & Setup Flow
+**Platform**: Portal web application
+**Process**: Two-step verification system
+
+```
+🏪 Print shop owner visits printwave.com/vendor/register
+📝 Fills business registration form:
+   - Business name, contact person, phone
+   - Full address and location coordinates
+   - Pricing structure (B&W/Color, Single/Double sided)
+   - Business hours and policies
+📧 Submits form → receives email verification
+✅ Clicks email verification link
+📧 Receives activation email containing:
+   - Activation key: "PW-ABC123-XYZ789"
+   - Station app download link
+   - Setup instructions
+💻 Downloads Station app for desktop
+🔑 Enters activation key in Station app
+📱 Station app connects to Core API
+🖨️ Station app auto-discovers connected printers
+📋 Reports printer capabilities to Core:
+   - Paper sizes (A4, A3, Letter, Legal)
+   - Color support (Yes/No)
+   - Duplex capability (Yes/No)
+   - Print speeds and specifications
+💰 Confirms pricing structure
+🔘 Clicks "Open Store" to start receiving jobs
+📋 Store appears in customer searches
+✅ Ready to receive print jobs
+```
+
+### 4. Daily Vendor Operations Flow
+**Platform**: Station desktop application
+**Process**: Real-time job management
+
+```
+🌅 Vendor arrives at shop
+💻 Opens Station app on desktop
+🔑 Logs in (stays logged in)
+🔘 Clicks "Open Store" button
+📡 App connects to Core API
+📋 Job queue shows: "No pending jobs"
+
+⏰ 10:30 AM - New job notification!
+📱 Notification popup: "New job received: PJ123456"
+📋 Job details display:
+   - Customer: Anonymous (QR code) or "John Smith" (registered)
+   - Document: "Report.pdf" (3 pages)
+   - Options: A4, Color, Double-sided
+   - Price: $2.50
+   - Estimated time: 5 minutes
+
+🖨️ Vendor reviews job and clicks "Accept"
+📄 Document automatically sent to selected printer
+🖨️ Printer starts printing
+📋 Job status updates to "Printing"
+
+⏱️ 5 minutes later - printing complete
+📄 Vendor collects printed pages
+📋 Clicks "Ready for Pickup"
+📱 System notifies customer (if registered)
+
+👤 Customer arrives at store
+🎫 Shows tracking code "PJ123456" or order confirmation
+💳 Customer pays $2.50 (if anonymous) or shows "Paid Online"
+📄 Vendor hands over documents
+📋 Clicks "Job Completed"
+💰 Earnings updated: +$2.25 (after 10% platform fee)
+📊 Daily statistics updated
+```
+
+## Customer Strategy: Anonymous vs Registered
+
+### Anonymous Customers (QR Code Only)
+**Allowed**: Only when physically present at store
+**Reasoning**: Eliminates vendor risk of abandoned print jobs
+
+**Restrictions**:
+- ❌ **No Online Anonymous**: Cannot upload from home/office
+- ❌ **No Remote Printing**: Must be at physical store location
+- ✅ **QR Code Only**: Anonymous option appears only after QR scan
+- ✅ **Immediate Pickup**: Customer waits while document prints
+
+**Benefits**:
+- 🚀 **Zero Friction**: No signup required for walk-in customers
+- 🔒 **Vendor Protection**: Customer is physically present
+- 💳 **Pay on Pickup**: No advance payment complexity
+- 📱 **Mobile Friendly**: Works on any smartphone camera
+
+### Registered Customers (Full Service)
+**Required**: For all online/remote printing
+**Reasoning**: Provides accountability and reduces abandonment
+
+**Features**:
+- 🌐 **Online Ordering**: Upload documents from anywhere
+- 💳 **Pre-payment**: Pay online before printing
+- 📧 **Notifications**: Email and push notifications
+- 📊 **Order History**: Track all previous jobs
+- ⭐ **Reviews**: Rate and review print shops
+- 💾 **Saved Preferences**: Store favorite print settings
+
+**Benefits**:
+- 📈 **Higher Revenue**: Pre-paid jobs guarantee payment
+- 🔒 **Lower Risk**: Customer details and payment secured
+- 🎯 **Better Matching**: Personalized store recommendations
+- 💌 **Communication**: Direct customer communication channel
+
+### API Strategy
+
+**Separate Endpoints for Clear Logic**:
+```java
+// Anonymous (QR Code Only)
+GET /store/{storeCode}                    // QR landing page
+POST /api/jobs/qr-anonymous-upload        // Anonymous upload
+GET /api/jobs/status/{trackingCode}       // Anonymous tracking
+
+// Registered Users (Full Service)
+POST /api/jobs/upload                     // Authenticated upload
+GET /api/jobs/history                     // User order history
+POST /api/jobs/reorder                    // Reorder previous job
+```
+
+**Frontend Flow Control**:
+```javascript
+// Online Portal: Always require login
+if (accessType === 'online') {
+    requireAuthentication();
+}
+
+// QR Code: Show anonymous option
+if (accessType === 'qr_code') {
+    showOptions([
+        'Sign In',
+        'Create Account', 
+        'Continue Without Account'
+    ]);
+}
+```
    - Sees print preview with all settings applied
    - Confirms and prints document
    - Updates job status to completed
@@ -224,7 +507,8 @@ src/
 │   │   ├── PasswordResetRequest.java
 │   │   └── ProfileResponse.java
 │   ├── entity/
-│   │   └── User.java
+│   │   ├── User.java
+│   │   └── Vendor.java (✅ NEW - Phase 2)
 │   ├── enums/
 │   │   └── UserRole.java
 │   ├── repository/
@@ -244,6 +528,17 @@ src/
 └── resources/
     └── application.properties
 ```
+
+#### Vendor Entity Features (✅ Complete):
+- **Business Information**: Name, contact person, phone, address, city, state, zip
+- **Location Coordinates**: Latitude, longitude for distance calculations
+- **Pricing Structure**: 4 price points (B&W/Color × Single/Double sided)
+- **Two-Step Verification**: Email verification → activation key workflow
+- **QR Code Support**: Store code generation and URL creation
+- **Store Status**: Manual open/close toggle with timestamp tracking
+- **Station App Integration**: Connection status and last login tracking
+- **Printer Capabilities**: JSON storage for flexible printer information
+- **Helper Methods**: Business logic for order readiness and registration status
 
 ### 🎯 Next Development Steps
 
@@ -283,8 +578,56 @@ src/
 - [x] Add protected user endpoints (profile, dashboard)
 - [x] Role-based access control with @PreAuthorize
 
-### Phase 2: Vendor Layer
-- [ ] Create `Vendor` entity with business details
+### Phase 2: Vendor Layer (IN PROGRESS 🔄)
+
+#### Vendor Entity Design (PLANNING)
+Vendor registration happens on **Portal (Frontend)**, authentication via **Station App**.
+
+**Vendor Registration Flow:**
+1. **Portal Registration**: Vendor fills business details form
+2. **Email Verification**: System sends verification email, vendor clicks link
+3. **Activation Email**: After verification, system sends activation key + Station app download link
+4. **Station App Setup**: Vendor downloads app, logs in with activation key
+5. **Printer Discovery**: Station app auto-discovers printers and syncs capabilities
+
+**Portal Registration Fields:**
+- Business details (name, contact person, phone, address)
+- Location coordinates (latitude, longitude) for distance calculations
+- Pricing structure (B&W/Color, Single/Double sided)
+- Account management (email, verification token, activation key)
+
+**Vendor Entity Architecture:**
+- **No Role Field**: Vendor entity represents print shops only (unlike User entity)
+- **Separate Authentication**: Vendors use activation keys, not email/password
+- **Different Purpose**: User = Customer authentication, Vendor = Business management
+- **Future Tiers**: Can add VendorTier enum later if needed (Standard, Premium, Enterprise)
+
+**Station App Integration:**
+- Login using activation key (sent via email)
+- Manual store open/close toggle
+- Printer capability auto-discovery
+- Real-time job queue management
+
+**Location-Based Store Matching:**
+- Customer location provided per print job (not stored in User entity)
+- Distance calculation: "as the crow flies" initially
+- Search radius: 5km → 10km → 20km (if insufficient results)
+- Only show stores that are: Open + Have Required Capabilities + Within Range
+
+**Store Selection Methods:**
+1. **Manual**: Customer sees filtered list, picks preferred store
+2. **Automatic**: Broadcast to all qualifying stores, first to accept gets job
+
+#### Implementation Tasks:
+- [x] Create `Vendor` entity with business details (COMPLETE ✅)
+  - Business details (name, contact, phone, address, location)
+  - Pricing structure (B&W/Color, Single/Double sided)
+  - Two-step verification (email verification → activation key)
+  - QR code support (store code, URL generation)
+  - Store status management (isStoreOpen, storeStatusUpdatedAt)
+  - Station app integration (connection status)
+  - Printer capabilities (JSON storage)
+  - Helper methods (isReadyForOrders, isRegistrationComplete)
 - [ ] Create `VendorService` for vendor operations
 - [ ] Create `VendorController` for vendor API endpoints
 - [ ] Implement activation key generation and validation
@@ -306,7 +649,167 @@ src/
 - [ ] Advanced job matching algorithms
 - [ ] Performance optimization
 
-## Frontend Integration & Production Migration Guide
+## Frontend Integration & Development Coordination
+
+### Current Development Status
+- **Backend (Core)**: Phase 1 complete, Phase 2 in progress
+- **Frontend (Portal)**: Being developed by team member
+- **Station App**: Planned for Phase 4
+
+### Frontend Integration Notes
+
+#### User Management APIs (Phase 1 - COMPLETE)
+**Available for Frontend Integration:**
+- `POST /api/users/register` - User registration
+- `POST /api/users/login` - Authentication (returns JWT)
+- `GET /api/users/profile` - Protected profile (requires JWT)
+- `GET /api/users/dashboard` - Protected dashboard (requires JWT)
+- Password reset workflow (email + form)
+
+**JWT Authentication Pattern:**
+```javascript
+// Frontend login
+const response = await fetch('/api/users/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password })
+});
+const { token } = await response.json();
+
+// Use token for protected endpoints
+fetch('/api/users/profile', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+```
+
+#### Vendor Management APIs (Phase 2 - IN PROGRESS)
+**Planned for Frontend Integration:**
+- `POST /api/vendors/register` - Business registration
+- `GET /api/vendors/verify-email` - Email verification
+- Vendor profile management
+- Activation key generation and email sending
+
+**Vendor Entity Structure (Final):**
+```java
+@Entity
+public class Vendor {
+    // Core Identity
+    private Long id;
+    private String email;
+    private String activationKey;           // For Station app login
+    
+    // Business Details (Portal Registration)
+    private String businessName;
+    private String contactPersonName;
+    private String phoneNumber;
+    private String businessAddress;
+    private String city;
+    private String state;
+    private String zipCode;
+    
+    // Location (Portal Registration)
+    private Double latitude;
+    private Double longitude;
+    
+    // Pricing (Portal Registration)
+    private BigDecimal pricePerPageBWSingleSided;
+    private BigDecimal pricePerPageBWDoubleSided;
+    private BigDecimal pricePerPageColorSingleSided;
+    private BigDecimal pricePerPageColorDoubleSided;
+    
+    // Email Verification (Two-Step Process)
+    private Boolean emailVerified;          // Step 1: Email verification
+    private String verificationToken;       // Token for email verification
+    private Boolean activationKeySent;      // Step 2: Activation key sent?
+    
+    // Store Status (Station App Control)
+    private Boolean isStoreOpen;
+    private LocalDateTime storeStatusUpdatedAt;
+    private Boolean stationAppConnected;
+    
+    // Printer Capabilities (Station App Updates)
+    private String printerCapabilities;     // JSON string
+    
+    // Account Management
+    private Boolean isActive;
+    private LocalDateTime registeredAt;
+    private LocalDateTime lastLoginAt;
+    
+    // NO ROLE FIELD - vendor is always a vendor
+}
+```
+
+**Vendor Registration Form Fields (for Frontend):**
+```javascript
+// Portal vendor registration form
+{
+  email: string,
+  businessName: string,
+  contactPersonName: string,
+  phoneNumber: string,
+  businessAddress: string,
+  city: string,
+  state: string,
+  zipCode: string,
+  latitude: number,        // From map interface
+  longitude: number,       // From map interface
+  pricePerPageBWSingleSided: number,
+  pricePerPageBWDoubleSided: number,
+  pricePerPageColorSingleSided: number,
+  pricePerPageColorDoubleSided: number
+}
+```
+
+#### Station App Integration (Phase 4 - PLANNED)
+**Planned APIs:**
+- `POST /api/vendors/station-login` - Activation key login
+- `GET /api/vendors/job-queue` - Pending print jobs
+- `POST /api/vendors/toggle-store` - Open/close store
+- `POST /api/vendors/update-capabilities` - Printer capabilities
+- `POST /api/jobs/accept` - Accept print job
+- `POST /api/jobs/complete` - Mark job completed
+
+#### Maps Integration - Development Responsibilities
+
+**Backend (Core API) Responsibilities:**
+- ✅ Store location coordinates (latitude, longitude) in Vendor entity
+- ✅ Create API endpoints to receive coordinates from frontend
+- ✅ Implement distance calculation between customer and vendor locations
+- ✅ Filter vendors by distance ("as the crow flies" calculation)
+- ✅ Provide location-based vendor search functionality
+
+**Frontend (Portal) Responsibilities:**
+- Map interface for vendor location selection during registration
+- Interactive map with draggable pins for precise location setting
+- Customer location input (current location or address entry)
+- Display nearby vendors on customer-facing map
+- Integration with free mapping services (OpenStreetMap + Leaflet.js recommended)
+
+**Maps API Options (Frontend Implementation):**
+1. **OpenStreetMap + Leaflet.js** - 100% Free (Recommended)
+2. **Mapbox** - Free tier: 50,000 map loads/month
+3. **Google Maps** - $200 free credit/month, then paid
+4. **MapTiler** - Free tier: 100,000 map loads/month
+
+**Location Data Flow:**
+```javascript
+// Frontend collects coordinates via map interaction
+const coordinates = { latitude: 40.7128, longitude: -74.0060 };
+
+// Sends to backend API
+fetch('/api/vendors/register', {
+  body: JSON.stringify({
+    businessName: "ABC Print Shop",
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    // ... other vendor details
+  })
+});
+```
+
+**Backend receives and stores coordinates - no map integration needed in backend**
+
+### Migration Guide for Production
 
 ### Current Email Link Flow (Development)
 1. **Password Reset Email** → Contains link: `http://localhost:8080/api/users/reset-password?token=abc123`
@@ -717,6 +1220,28 @@ DB_PASSWORD=[your_password]
 - **Phase 1 Complete**: User layer with full JWT authentication system is now production-ready
 - **Architecture Enhancement**: Added security package with proper separation of concerns
 - **Ready for Phase 2**: Vendor layer implementation with separate authentication system
+
+### Session 10 (Phase 2 Planning - Vendor Layer Design)
+- **Vendor Entity Architecture**: Designed comprehensive vendor entity with business details
+- **Location-Based Matching**: Planned coordinate-based store discovery system
+- **Pricing Structure**: Designed flexible pricing (B&W/Color, Single/Double sided)
+- **Store Status Management**: Planned manual open/close toggle for real-time store availability
+- **Distance Calculation**: Decided on "as the crow flies" approach with expandable search radius
+- **Store Selection Methods**: Planned manual selection + automatic broadcast system
+- **Customer Location Strategy**: Decided to handle per-order location (not stored in User entity)
+- **Frontend Coordination**: Added comprehensive frontend integration documentation
+- **API Planning**: Documented planned vendor endpoints for Portal and Station app
+- **Maps Integration Planning**: Clarified backend vs frontend responsibilities for location features
+- **Maps API Research**: Evaluated free options (OpenStreetMap recommended for frontend)
+- **Payment Strategy**: Decided to keep vendor entity simple, add payment fields later
+- **Role Architecture**: Decided NO role field in Vendor entity (separate from User roles)
+- **Registration Flow**: Designed two-step verification (email verification → activation key)
+- **Anonymous vs Registered Strategy**: Designed QR-only anonymous printing to reduce vendor risk
+- **Complete Application Flow**: Documented detailed workflows for all user types and components
+- **Three-App Architecture**: Detailed Core API, Portal Frontend, and Station App responsibilities
+- **Risk Mitigation**: Anonymous only for QR codes (customer present), registered required for online
+- **Development Coordination**: Enhanced documentation for team collaboration
+- **Phase 2 Status**: Ready to implement Vendor entity with final specifications
 
 ---
 
