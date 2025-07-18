@@ -28,6 +28,13 @@ public class Vendor {
     @Column(name = "activation_key", unique = true)
     private String activationKey;  // "PW-ABC123-XYZ789" for Station app login
 
+    // Password Authentication (for subsequent logins)
+    @Column(name = "password_hash")
+    private String passwordHash;  // BCrypt hashed password
+
+    @Column(name = "password_set", nullable = false)
+    private Boolean passwordSet = false;  // Has vendor set up password?
+
     // Business Details (Portal Registration)
     @Column(name = "business_name", nullable = false)
     private String businessName;

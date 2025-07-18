@@ -110,4 +110,84 @@ public class VendorController {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }
     }
+    
+    // ============ PASSWORD-BASED AUTHENTICATION ENDPOINTS ============
+    
+    @PostMapping("/first-time-login")
+    public ResponseEntity<VendorLoginResponse> firstTimeLogin(@RequestBody FirstTimeLoginRequest request) {
+        try {
+            Vendor vendor = vendorService.firstTimeLoginWithPasswordSetup(request.getActivationKey(), request.getNewPassword());
+            
+            // Create login response
+            VendorLoginResponse response = createLoginResponse(vendor);
+            response.setMessage("First-time login successful! Password set. Welcome " + vendor.getBusinessName());
+            
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new VendorLoginResponse("Error: " + e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/login")
+    public ResponseEntity<VendorLoginResponse> login(@RequestBody VendorLoginRequest request) {
+        try {
+            Vendor vendor = vendorService.loginWithStoreCodeAndPassword(request.getStoreCode(), request.getPassword());
+            
+            // Create login response
+            VendorLoginResponse response = createLoginResponse(vendor);
+            response.setMessage("Login successful! Welcome back " + vendor.getBusinessName());
+            
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new VendorLoginResponse("Error: " + e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse> changePassword(@RequestBody ChangePasswordRequest request) {
+        try {
+            vendorService.changePassword(request.getVendorId(), request.getCurrentPassword(), request.getNewPassword());
+            return ResponseEntity.ok(ApiResponse.success("Password changed successfully."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse> resetPassword(@RequestBody ResetPasswordRequest request) {
+        try {
+            vendorService.resetPasswordWithActivationKey(request.getActivationKey(), request.getNewPassword());
+            return ResponseEntity.ok(ApiResponse.success("Password reset successfully."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+    
+    // Helper method to create login response
+    private VendorLoginResponse createLoginResponse(Vendor vendor) {
+        VendorLoginResponse response = new VendorLoginResponse();
+        response.setVendorId(vendor.getId());
+        response.setBusinessName(vendor.getBusinessName());
+        response.setEmail(vendor.getEmail());
+        response.setContactPersonName(vendor.getContactPersonName());
+        response.setPhoneNumber(vendor.getPhoneNumber());
+        
+        response.setIsStoreOpen(vendor.getIsStoreOpen());
+        response.setStationAppConnected(vendor.getStationAppConnected());
+        response.setStoreStatusUpdatedAt(vendor.getStoreStatusUpdatedAt());
+        
+        response.setStoreCode(vendor.getStoreCode());
+        response.setQrCodeUrl(vendor.getQrCodeUrl());
+        
+        response.setPricePerPageBWSingleSided(vendor.getPricePerPageBWSingleSided());
+        response.setPricePerPageBWDoubleSided(vendor.getPricePerPageBWDoubleSided());
+        response.setPricePerPageColorSingleSided(vendor.getPricePerPageColorSingleSided());
+        response.setPricePerPageColorDoubleSided(vendor.getPricePerPageColorDoubleSided());
+        
+        response.setPrinterCapabilities(vendor.getPrinterCapabilities());
+        response.setLastLoginAt(vendor.getLastLoginAt());
+        response.setPasswordSet(vendor.getPasswordSet());
+        
+        return response;
+    }
 }

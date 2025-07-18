@@ -48,9 +48,13 @@ public class SecurityConfig {
                 .requestMatchers("/api/vendors/register").permitAll()
                 .requestMatchers("/api/vendors/verify-email").permitAll()
                 .requestMatchers("/api/vendors/station-login").permitAll()
+                .requestMatchers("/api/vendors/first-time-login").permitAll()
+                .requestMatchers("/api/vendors/login").permitAll()
+                .requestMatchers("/api/vendors/reset-password").permitAll()
                 // Protected for vendor operations
                 .requestMatchers("/api/vendors/toggle-store").authenticated()
                 .requestMatchers("/api/vendors/update-capabilities").authenticated()
+                .requestMatchers("/api/vendors/change-password").authenticated()
                 
                 // Protected user endpoints (authentication required)
                 .requestMatchers("/api/users/profile").authenticated()

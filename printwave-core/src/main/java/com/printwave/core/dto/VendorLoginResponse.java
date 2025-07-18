@@ -41,6 +41,9 @@ public class VendorLoginResponse {
     private String message;
     private LocalDateTime lastLoginAt;
     
+    // Password status
+    private Boolean passwordSet;
+    
     // Constructor for successful login
     public VendorLoginResponse(String message) {
         this.message = message;

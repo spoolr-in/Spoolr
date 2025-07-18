@@ -3,6 +3,7 @@ package com.printwave.core.service;
 import com.printwave.core.entity.Vendor;
 import com.printwave.core.repository.VendorRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -293,6 +294,142 @@ public class VendorService {
             .orElseThrow(() -> new RuntimeException("Vendor not found"));
         
         vendor.setIsActive(true);
+        
+        return vendorRepository.save(vendor);
+    }
+    
+    // ============ PASSWORD-BASED AUTHENTICATION ============
+    
+    /**
+     * First-time login with activation key + password setup
+     * This replaces the old station-login for first-time users
+     */
+    @Transactional
+    public Vendor firstTimeLoginWithPasswordSetup(String activationKey, String newPassword) {
+        // Find vendor by activation key
+        Vendor vendor = vendorRepository.findByActivationKey(activationKey)
+            .orElseThrow(() -> new RuntimeException("Invalid activation key"));
+        
+        // Validate vendor state
+        if (!vendor.getIsActive()) {
+            throw new RuntimeException("Vendor account is deactivated");
+        }
+        
+        if (!vendor.getEmailVerified()) {
+            throw new RuntimeException("Email not verified. Please verify your email first.");
+        }
+        
+        if (vendor.getPasswordSet()) {
+            throw new RuntimeException("Password already set. Please use regular login.");
+        }
+        
+        // Validate password strength
+        if (newPassword == null || newPassword.trim().length() < 6) {
+            throw new RuntimeException("Password must be at least 6 characters long");
+        }
+        
+        // Hash and set password
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        vendor.setPasswordHash(encoder.encode(newPassword));
+        vendor.setPasswordSet(true);
+        
+        // Update login info
+        vendor.setLastLoginAt(LocalDateTime.now());
+        vendor.setStationAppConnected(true);
+        
+        return vendorRepository.save(vendor);
+    }
+    
+    /**
+     * Regular login with store code + password
+     * For vendors who have already set up their password
+     */
+    @Transactional
+    public Vendor loginWithStoreCodeAndPassword(String storeCode, String password) {
+        // Find vendor by store code
+        Vendor vendor = vendorRepository.findByStoreCode(storeCode)
+            .orElseThrow(() -> new RuntimeException("Invalid store code"));
+        
+        // Validate vendor state
+        if (!vendor.getIsActive()) {
+            throw new RuntimeException("Vendor account is deactivated");
+        }
+        
+        if (!vendor.getEmailVerified()) {
+            throw new RuntimeException("Email not verified. Please complete email verification first.");
+        }
+        
+        if (!vendor.getPasswordSet()) {
+            throw new RuntimeException("Password not set. Please use activation key for first-time login.");
+        }
+        
+        // Validate password
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        if (!encoder.matches(password, vendor.getPasswordHash())) {
+            throw new RuntimeException("Invalid password");
+        }
+        
+        // Update login info
+        vendor.setLastLoginAt(LocalDateTime.now());
+        vendor.setStationAppConnected(true);
+        
+        return vendorRepository.save(vendor);
+    }
+    
+    /**
+     * Change password for existing vendor
+     */
+    @Transactional
+    public Vendor changePassword(Long vendorId, String currentPassword, String newPassword) {
+        Vendor vendor = vendorRepository.findById(vendorId)
+            .orElseThrow(() -> new RuntimeException("Vendor not found"));
+        
+        if (!vendor.getPasswordSet()) {
+            throw new RuntimeException("No password set. Please use first-time login.");
+        }
+        
+        // Validate current password
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        if (!encoder.matches(currentPassword, vendor.getPasswordHash())) {
+            throw new RuntimeException("Current password is incorrect");
+        }
+        
+        // Validate new password
+        if (newPassword == null || newPassword.trim().length() < 6) {
+            throw new RuntimeException("New password must be at least 6 characters long");
+        }
+        
+        // Update password
+        vendor.setPasswordHash(encoder.encode(newPassword));
+        
+        return vendorRepository.save(vendor);
+    }
+    
+    /**
+     * Reset password using activation key (forgot password)
+     */
+    @Transactional
+    public Vendor resetPasswordWithActivationKey(String activationKey, String newPassword) {
+        Vendor vendor = vendorRepository.findByActivationKey(activationKey)
+            .orElseThrow(() -> new RuntimeException("Invalid activation key"));
+        
+        if (!vendor.getIsActive()) {
+            throw new RuntimeException("Vendor account is deactivated");
+        }
+        
+        if (!vendor.getEmailVerified()) {
+            throw new RuntimeException("Email not verified");
+        }
+        
+        // Validate new password
+        if (newPassword == null || newPassword.trim().length() < 6) {
+            throw new RuntimeException("Password must be at least 6 characters long");
+        }
+        
+        // Hash and set new password
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        vendor.setPasswordHash(encoder.encode(newPassword));
+        vendor.setPasswordSet(true);
         
         return vendorRepository.save(vendor);
     }

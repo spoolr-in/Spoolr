@@ -1357,6 +1357,49 @@ DB_PASSWORD=[your_password]
 - **Phase 2 Complete**: Vendor management system fully functional and ready for frontend integration
 - **Architecture Ready**: Foundation prepared for Phase 3 (Print Job Management)
 
+### Session 12 (Enhanced Vendor Authentication - Password-Based Login)
+- **Problem Identification**: Colleague suggested improving UX by allowing password-based authentication
+  - First-time login: activation key + password setup
+  - Subsequent logins: store code + password (easier than activation key)
+- **Entity Enhancement**: Added password authentication fields to Vendor entity
+  - `passwordHash` - BCrypt hashed password for security
+  - `passwordSet` - Boolean flag to track if vendor has set up password
+- **Service Layer Implementation**: Added new authentication methods to VendorService
+  - `firstTimeLoginWithPasswordSetup()` - Activation key + password setup
+  - `loginWithStoreCodeAndPassword()` - Store code + password authentication
+  - `changePassword()` - Allow vendors to change their password
+  - `resetPasswordWithActivationKey()` - Password reset using activation key
+- **Controller Layer Enhancement**: Added new authentication endpoints to VendorController
+  - POST /api/vendors/first-time-login - First login with password setup
+  - POST /api/vendors/login - Regular login with store code + password
+  - POST /api/vendors/change-password - Change existing password
+  - POST /api/vendors/reset-password - Reset password using activation key
+- **DTO Layer Expansion**: Created new DTOs for enhanced authentication
+  - FirstTimeLoginRequest - Activation key + new password
+  - VendorLoginRequest - Store code + password
+  - ChangePasswordRequest - Current password + new password
+  - ResetPasswordRequest - Activation key + new password
+- **Security Integration**: Updated Spring Security configuration
+  - Added new authentication endpoints to permitted URLs
+  - Maintained secure password handling with BCrypt
+- **User Experience Improvement**: Enhanced authentication flow
+  - First login: "Enter activation key + set password"
+  - Subsequent logins: "Store code (PW0001) + password"
+  - Password reset: Use activation key as backup
+- **Backward Compatibility**: Maintained existing activation key system
+  - Old `/api/vendors/station-login` still works
+  - New system provides enhanced UX while keeping security
+- **Testing & Validation**: Successfully compiled and ready for testing
+  - All new endpoints properly secured
+  - Comprehensive error handling implemented
+  - Ready for Station App integration
+- **Enhanced Authentication Complete**: Vendor login system significantly improved
+  - Better user experience with familiar login pattern
+  - Secure password storage with BCrypt
+  - Flexible password management (change/reset)
+  - Store code as username (easy to remember)
+  - Activation key as backup for password reset
+
 ---
 
 *This document should be updated after each development session to maintain accurate project state documentation.*
