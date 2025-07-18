@@ -319,7 +319,7 @@ public class VendorService {
             throw new RuntimeException("Email not verified. Please verify your email first.");
         }
         
-        if (vendor.getPasswordSet()) {
+        if (vendor.getPasswordSet() != null && vendor.getPasswordSet()) {
             throw new RuntimeException("Password already set. Please use regular login.");
         }
         
@@ -359,7 +359,7 @@ public class VendorService {
             throw new RuntimeException("Email not verified. Please complete email verification first.");
         }
         
-        if (!vendor.getPasswordSet()) {
+        if (vendor.getPasswordSet() == null || !vendor.getPasswordSet()) {
             throw new RuntimeException("Password not set. Please use activation key for first-time login.");
         }
         
@@ -384,7 +384,7 @@ public class VendorService {
         Vendor vendor = vendorRepository.findById(vendorId)
             .orElseThrow(() -> new RuntimeException("Vendor not found"));
         
-        if (!vendor.getPasswordSet()) {
+        if (vendor.getPasswordSet() == null || !vendor.getPasswordSet()) {
             throw new RuntimeException("No password set. Please use first-time login.");
         }
         

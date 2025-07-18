@@ -32,7 +32,7 @@ public class Vendor {
     @Column(name = "password_hash")
     private String passwordHash;  // BCrypt hashed password
 
-    @Column(name = "password_set", nullable = false)
+    @Column(name = "password_set")
     private Boolean passwordSet = false;  // Has vendor set up password?
 
     // Business Details (Portal Registration)

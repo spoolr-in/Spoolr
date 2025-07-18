@@ -29,11 +29,21 @@ PrintWave is a print service management platform that connects customers with lo
 POST /api/users/register
 POST /api/users/login
 GET /api/users/profile (JWT protected)
+POST /api/users/request-password-reset
+GET /api/users/reset-password
+POST /api/users/reset-password
+GET /api/users/dashboard (JWT protected)
 
 // Vendor Management
 POST /api/vendors/register
 GET /api/vendors/verify-email
-POST /api/vendors/station-login
+POST /api/vendors/station-login (legacy)
+POST /api/vendors/first-time-login (NEW - enhanced auth)
+POST /api/vendors/login (NEW - store code + password)
+POST /api/vendors/change-password (NEW)
+POST /api/vendors/reset-password (NEW)
+POST /api/vendors/{id}/toggle-store
+POST /api/vendors/{id}/update-capabilities
 
 // Print Jobs - Online (Registered Users Only)
 POST /api/jobs/upload (JWT required)
@@ -543,14 +553,26 @@ src/
 ├── main/java/com/printwave/core/
 │   ├── PrintwaveCoreApplication.java (Main Spring Boot class with @EnableAsync)
 │   ├── controller/
-│   │   └── UserController.java (with protected endpoints)
+│   │   ├── UserController.java (with protected endpoints)
+│   │   └── VendorController.java (✅ NEW - Phase 2)
 │   ├── dto/
+│   │   ├── ApiResponse.java (✅ NEW - Phase 2)
+│   │   ├── ChangePasswordRequest.java (✅ NEW - Session 12)
 │   │   ├── DashboardResponse.java
+│   │   ├── ErrorResponse.java (✅ NEW - Session 13)
+│   │   ├── FirstTimeLoginRequest.java (✅ NEW - Session 12)
 │   │   ├── LoginRequest.java
 │   │   ├── LoginResponse.java
 │   │   ├── PasswordResetEmailRequest.java
 │   │   ├── PasswordResetRequest.java
-│   │   └── ProfileResponse.java
+│   │   ├── PrinterCapabilitiesRequest.java (✅ NEW - Phase 2)
+│   │   ├── ProfileResponse.java
+│   │   ├── ResetPasswordRequest.java (✅ NEW - Session 12)
+│   │   ├── StationLoginRequest.java (✅ NEW - Phase 2)
+│   │   ├── StoreStatusRequest.java (✅ NEW - Phase 2)
+│   │   ├── VendorLoginRequest.java (✅ NEW - Session 12)
+│   │   ├── VendorLoginResponse.java (✅ NEW - Phase 2)
+│   │   └── VendorRegistrationRequest.java (✅ NEW - Phase 2)
 │   ├── entity/
 │   │   ├── User.java
 │   │   └── Vendor.java (✅ NEW - Phase 2)
@@ -563,8 +585,9 @@ src/
 │   │   ├── JwtAuthenticationFilter.java
 │   │   └── SecurityConfig.java
 │   ├── service/
+│   │   ├── EmailService.java (with @Async methods)
 │   │   ├── UserService.java
-│   │   └── EmailService.java (with @Async methods)
+│   │   └── VendorService.java (✅ NEW - Phase 2)
 │   └── util/
 │       └── JwtUtil.java
 ├── test/java/com/printwave/core/
@@ -1399,6 +1422,32 @@ DB_PASSWORD=[your_password]
   - Flexible password management (change/reset)
   - Store code as username (easy to remember)
   - Activation key as backup for password reset
+
+### Session 13 (Authentication Error Response Fix)
+- **Problem Identification**: Authentication errors returned full VendorLoginResponse with null fields
+  - Error case: `{"vendorId": null, "businessName": null, ..., "message": "Error: Invalid password"}`
+  - User requested clean error responses with only error message
+- **ErrorResponse DTO**: Created new clean error response structure
+  - `ErrorResponse.java` - Simple error response with success flag and message
+  - Static factory method `ErrorResponse.of(message)` for easy creation
+  - Consistent structure: `{"success": false, "message": "error message", "error": "error message"}`
+- **Controller Enhancement**: Fixed authentication endpoints to return proper error responses
+  - Updated `POST /api/vendors/first-time-login` to return `ErrorResponse` on failure
+  - Updated `POST /api/vendors/login` to return `ErrorResponse` on failure
+  - Changed return type from `ResponseEntity<VendorLoginResponse>` to `ResponseEntity<?>` for flexibility
+- **Clean Error Handling**: Authentication errors now return clean, minimal responses
+  - Success: Full `VendorLoginResponse` with all vendor details
+  - Error: Simple `ErrorResponse` with only error message
+  - No more null fields in error responses
+  - Better API design for frontend consumption
+- **User Experience Improvement**: API responses now provide clear distinction between success and error cases
+  - Frontend can easily identify error responses by checking `success` field
+  - Error messages are clean and actionable
+  - No unnecessary null data in error responses
+- **Authentication Error Fix Complete**: Clean error responses implemented for all authentication endpoints
+  - Maintains backward compatibility for success cases
+  - Improved error handling for better frontend integration
+  - Professional API design with consistent error structure
 
 ---
 

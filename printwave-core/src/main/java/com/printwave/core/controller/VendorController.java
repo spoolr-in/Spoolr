@@ -114,7 +114,7 @@ public class VendorController {
     // ============ PASSWORD-BASED AUTHENTICATION ENDPOINTS ============
     
     @PostMapping("/first-time-login")
-    public ResponseEntity<VendorLoginResponse> firstTimeLogin(@RequestBody FirstTimeLoginRequest request) {
+    public ResponseEntity<?> firstTimeLogin(@RequestBody FirstTimeLoginRequest request) {
         try {
             Vendor vendor = vendorService.firstTimeLoginWithPasswordSetup(request.getActivationKey(), request.getNewPassword());
             
@@ -124,12 +124,12 @@ public class VendorController {
             
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(new VendorLoginResponse("Error: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorResponse.of(e.getMessage()));
         }
     }
     
     @PostMapping("/login")
-    public ResponseEntity<VendorLoginResponse> login(@RequestBody VendorLoginRequest request) {
+    public ResponseEntity<?> login(@RequestBody VendorLoginRequest request) {
         try {
             Vendor vendor = vendorService.loginWithStoreCodeAndPassword(request.getStoreCode(), request.getPassword());
             
@@ -139,7 +139,7 @@ public class VendorController {
             
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(new VendorLoginResponse("Error: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(ErrorResponse.of(e.getMessage()));
         }
     }
     
