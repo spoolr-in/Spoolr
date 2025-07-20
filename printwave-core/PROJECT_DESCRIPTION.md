@@ -162,6 +162,204 @@ POST /api/jobs/complete
 - Station app communication protocols
 - Performance optimization
 
+## 🐳 Docker Setup for PrintWave
+
+### 📁 File Structure
+```
+printwave-core/
+├── src/                          # Your Java source code
+│   └── main/java/com/printwave/core/
+├── target/                       # Built JAR files (after mvn package)
+│   └── printwave-core.jar
+├── Dockerfile                    # 🆕 Instructions to build PrintWave Core image
+├── docker-compose.yml            # 🆕 Orchestrates all services
+├── .dockerignore                 # 🆕 Files to ignore when building Docker image
+├── .env                         # Environment variables (existing)
+├── pom.xml                      # Maven configuration (existing)
+└── README.md                    # Project documentation (existing)
+```
+
+### 🏗️ Complete Docker Architecture
+
+### Our 3 Services:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DOCKER COMPOSE                          │
+├─────────────────────────────────────────────────────────────┤
+│  Service 1: printwave-core                                  │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  🏗️  Built from OUR Dockerfile                        │  │
+│  │  📦  Spring Boot App (Java 17)                       │  │
+│  │  🌐  Port: 8080                                      │  │
+│  │  🔗  Connects to: postgres + minio                   │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  Service 2: postgres                                        │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  📦  Official PostgreSQL Image (no Dockerfile)       │  │
+│  │  🗄️   Database Storage                                │  │
+│  │  🌐  Port: 5432                                      │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  Service 3: minio                                           │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  📦  Official MinIO Image (no Dockerfile)            │  │
+│  │  ☁️   File Storage (S3-like)                         │  │
+│  │  🌐  API Port: 9000, Console: 9001                  │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 📄 File Contents
+
+#### 1. **Dockerfile** (for PrintWave Core only)
+```dockerfile
+# Multi-stage build
+FROM maven:3.9.4-openjdk-17 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+FROM openjdk:17-jdk-slim
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+#### 2. **docker-compose.yml** (orchestrates all services)
+```yaml
+version: '3.8'
+
+services:
+  # 🗄️ Database Service (uses official image)
+  postgres:
+    image: postgres:15
+    container_name: printwave-postgres
+    environment:
+      POSTGRES_DB: printwave_db
+      POSTGRES_USER: printwave_user
+      POSTGRES_PASSWORD: printwave_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ☁️ File Storage Service (uses official image)
+  minio:
+    image: minio/minio:latest
+    container_name: printwave-minio
+    environment:
+      MINIO_ACCESS_KEY: printwave-access-key
+      MINIO_SECRET_KEY: printwave-secret-key
+    ports:
+      - "9000:9000"    # API
+      - "9001:9001"    # Web Console
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # 🚀 Our Spring Boot App (uses our Dockerfile)
+  printwave-core:
+    build: .                    # 👈 This uses our Dockerfile
+    container_name: printwave-core
+    environment:
+      # Database connection
+      DB_URL: jdbc:postgresql://postgres:5432/printwave_db
+      DB_USERNAME: printwave_user
+      DB_PASSWORD: printwave_password
+      
+      # MinIO connection
+      MINIO_URL: http://minio:9000
+      MINIO_ACCESS_KEY: printwave-access-key
+      MINIO_SECRET_KEY: printwave-secret-key
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - minio
+
+# 💾 Data persistence
+volumes:
+  postgres_data:
+  minio_data:
+```
+
+#### 3. **.dockerignore** (what NOT to include in Docker image)
+```
+target/
+*.log
+.git/
+.env
+README.md
+docker-compose.yml
+Dockerfile
+```
+
+### 🔄 How It All Works Together
+
+#### Step 1: Build Process
+```bash
+docker-compose up --build
+```
+1. **Docker Compose reads docker-compose.yml**
+2. **For postgres**: Downloads official PostgreSQL image
+3. **For minio**: Downloads official MinIO image  
+4. **For printwave-core**: Builds custom image using our Dockerfile
+5. **Starts all services** and connects them
+
+#### Step 2: Network Communication
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Spring Boot │───▶│ PostgreSQL  │    │    MinIO    │
+│   :8080     │    │    :5432    │    │ :9000/:9001 │
+│             │    │             │    │             │
+│ printwave-  │◀───┤ postgres    │    │   minio     │
+│    core     │    │             │    │             │
+└─────────────┘    └─────────────┘    └─────────────┘
+```
+#### Step 3: Access Points
+- **Spring Boot API**: http://localhost:8080
+- **MinIO Console**: http://localhost:9001 (web interface)
+- **PostgreSQL**: localhost:5432 (via database tools like DBeaver)
+
+### 🎯 What We Need vs What's Ready
+
+#### ✅ Ready to Use (Official Images)
+- **PostgreSQL**: Just configure and run
+- **MinIO**: Just configure and run
+
+#### 🛠️ Docker Setup Status
+- [x] **Dockerfile**: ✅ CREATED - Multi-stage build with Java 21 Temurin
+- [ ] **docker-compose.yml**: To orchestrate all services
+- [ ] **.dockerignore**: To optimize build performance
+
+### 🚀 Development Workflow
+```bash
+# 1. Start all services
+docker-compose up -d
+
+# 2. Check logs
+docker-compose logs printwave-core
+
+# 3. Access services
+# - Spring Boot: http://localhost:8080
+# - MinIO Console: http://localhost:9001
+
+# 4. Stop all services
+docker-compose down
+```
+
+This setup gives us:
+- ✅ **Consistent environment** across all machines
+- ✅ **Easy setup** for new team members
+- ✅ **Production-ready** deployment structure
+- ✅ **Isolated services** that can scale independently
+
+_Refer to the PROJECT_DESCRIPTION.md for further details on setting up and managing the Docker environment._
+
 
 ### 1. Registered Customer Flow (Online Portal)
 **Requirements**: Must create account and login
@@ -738,13 +936,341 @@ Vendor registration happens on **Portal (Frontend)**, authentication via **Stati
 - [x] Add printer capability management (COMPLETE ✅)
 - [x] Implement pricing structure (COMPLETE ✅)
 
-### Phase 3: Print Job Management
-- [ ] Create `PrintJob` entity for job tracking
-- [ ] Create `Document` entity for file management
-- [ ] Implement file upload and storage
-- [ ] Add job matching algorithm (vendor selection)
-- [ ] Create job queue management
-- [ ] Add real-time status updates
+### Phase 3: Print Job Management (NEXT - READY TO IMPLEMENT)
+
+#### 🎯 What is PrintJob?
+A **PrintJob** is a digital order ticket that contains everything needed to print a document:
+```
+📋 PrintJob = One Customer's Print Order
+├── 👤 Who ordered it? (Customer/Anonymous)
+├── 🏪 Which store will print it? (Vendor)
+├── 📄 What document? (File reference in MinIO/S3)
+├── ⚙️ How to print it? (Color, pages, copies)
+├── 💰 How much does it cost? (Price)
+├── 📊 What's the status? (Uploaded → Printing → Ready)
+└── 🎫 Tracking code (PJ123456)
+```
+
+#### 🔄 Upload Files vs Job Upload
+- **File Upload** = Storing the actual PDF/document file in cloud storage
+- **Job Upload** = Creating a print order that REFERENCES that file
+- **Our API**: `POST /api/jobs/upload` handles BOTH in one request
+
+#### ☁️ Cloud Storage Strategy (MinIO)
+**Why MinIO instead of local storage:**
+- ✅ Server performance (no file bloat)
+- ✅ Scalability (millions of files)
+- ✅ Reliability (no data loss)
+- ✅ Cost-effective (free alternative to AWS S3)
+
+**Storage Structure:**
+```
+Bucket: printwave-documents
+├── 2024/01/15/job_123_resume.pdf
+├── 2024/01/15/job_124_photo.jpg
+└── 2024/01/16/job_125_report.docx
+```
+
+#### 🔗 JPA Relations Explained
+```java
+// One Customer can have MANY PrintJobs
+User customer → List<PrintJob> jobs
+
+// Each PrintJob belongs to ONE Customer and ONE Vendor
+PrintJob → User customer (who ordered)
+PrintJob → Vendor vendor (who will print)
+
+// One Vendor can have MANY PrintJobs
+Vendor vendor → List<PrintJob> assignedJobs
+```
+
+#### 💰 BigDecimal for Money
+- ❌ `double price = 0.1 + 0.2;` // Result: 0.30000000000000004
+- ✅ `BigDecimal price = new BigDecimal("0.10").add(new BigDecimal("0.20"));` // Result: 0.30
+- **Rule**: Always use BigDecimal for money calculations
+
+#### 📁 Multi-File Upload Strategy
+**Case 1: Same Requirements for All Files**
+```
+Files: [resume.pdf, cover.pdf, certificates.pdf]
+Requirements: A4, Color, 2 copies each
+Result: 3 separate PrintJobs with same settings
+```
+
+**Case 2: Different Requirements per File**
+```
+File 1: resume.pdf → A4, B&W, 1 copy
+File 2: photo.jpg → A4, Color, 5 copies
+File 3: report.pdf → A3, B&W, 2 copies
+Result: 3 separate PrintJobs with different settings
+```
+
+#### 📋 Implementation Tasks:
+
+**Phase 3A: Foundation Setup (Week 1)**
+- [ ] Create JobStatus enum (UPLOADED, PROCESSING, MATCHED, ACCEPTED, PRINTING, READY, COMPLETED, CANCELLED, REJECTED)
+- [ ] Create PaperSize enum (A4, A3, LETTER, LEGAL)
+- [ ] Create FileType enum (PDF, DOCX, JPG, PNG)
+- [ ] Create PrintJob entity with all relationships and fields
+- [ ] Create PrintJobRepository with custom queries
+- [ ] Test database schema creation
+
+**Phase 3B: Cloud Storage Setup (Week 2)**
+- [ ] Add MinIO dependency to pom.xml
+- [ ] Set up MinIO with Docker (docker-compose.yml)
+- [ ] Create MinIOConfig configuration class
+- [ ] Create FileStorageService for upload/download operations
+- [ ] Create bucket and test file upload
+- [ ] Implement file URL generation with expiry
+
+**Phase 3C: Job Upload APIs (Week 3)**
+- [ ] Create PrintJobService with business logic
+- [ ] Implement single file upload endpoint: `POST /api/jobs/upload`
+- [ ] Add file validation (size, type, content)
+- [ ] Create job tracking code generation
+- [ ] Add price calculation logic
+- [ ] Test complete upload workflow
+
+**Phase 3D: Multi-File Upload (Week 4)**
+- [ ] Implement batch upload (same requirements): `POST /api/jobs/batch-upload-same`
+- [ ] Implement batch upload (different requirements): `POST /api/jobs/batch-upload-different`
+- [ ] Create JobRequirement DTO for flexible requirements
+- [ ] Add batch validation and error handling
+- [ ] Test multi-file upload scenarios
+
+**Phase 3E: Job Matching & Vendor APIs (Week 5)**
+- [ ] Create VendorMatchingService for job assignment
+- [ ] Implement distance-based vendor filtering
+- [ ] Add capability-based vendor matching
+- [ ] Create vendor job queue endpoint: `GET /api/vendors/job-queue`
+- [ ] Add job status update endpoints for vendors
+- [ ] Test complete vendor workflow
+
+**Phase 3F: Customer Job Management (Week 6)**
+- [ ] Create customer job history endpoint: `GET /api/jobs/history`
+- [ ] Add job status tracking endpoint: `GET /api/jobs/status/{trackingCode}`
+- [ ] Implement anonymous job tracking (QR code workflow)
+- [ ] Add job cancellation functionality
+- [ ] Create job reorder functionality
+- [ ] Test complete customer workflow
+
+#### 🏗️ Entity Architecture:
+
+**PrintJob Entity (Core)**
+```java
+@Entity
+@Table(name = "print_jobs")
+public class PrintJob {
+    // Core Identity
+    @Id @GeneratedValue private Long id;
+    @Column(unique = true) private String trackingCode; // PJ123456
+    
+    // Relationships
+    @ManyToOne private User customer;    // null for anonymous
+    @ManyToOne private Vendor vendor;    // assigned vendor
+    
+    // File Information (MinIO)
+    private String originalFileName;     // "resume.pdf"
+    private String storedFileName;       // "job_123_resume.pdf"
+    private String s3BucketName;        // "printwave-documents"
+    private String s3ObjectKey;         // "2024/01/15/job_123_resume.pdf"
+    @Enumerated(EnumType.STRING) private FileType fileType;
+    private Long fileSizeBytes;
+    
+    // Print Specifications
+    @Enumerated(EnumType.STRING) private PaperSize paperSize;
+    private Boolean isColor;
+    private Boolean isDoubleSided;
+    private Integer copies;
+    
+    // Pricing (BigDecimal for precision)
+    @Column(precision = 10, scale = 2) private BigDecimal pricePerPage;
+    @Column(precision = 10, scale = 2) private BigDecimal totalPrice;
+    private Integer totalPages;
+    
+    // Status & Timestamps
+    @Enumerated(EnumType.STRING) private JobStatus status;
+    @CreationTimestamp private LocalDateTime createdAt;
+    private LocalDateTime matchedAt;
+    private LocalDateTime completedAt;
+    
+    // Helper Methods
+    public boolean isAnonymous() { return customer == null; }
+    public boolean isReadyForPickup() { return status == JobStatus.READY; }
+}
+```
+
+**Supporting Enums**
+```java
+public enum JobStatus {
+    UPLOADED, PROCESSING, MATCHED, ACCEPTED, 
+    PRINTING, READY, COMPLETED, CANCELLED, REJECTED
+}
+
+public enum PaperSize {
+    A4("210x297mm"), A3("297x420mm"), 
+    LETTER("216x279mm"), LEGAL("216x356mm");
+}
+
+public enum FileType {
+    PDF("application/pdf"), 
+    DOCX("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    JPG("image/jpeg"), PNG("image/png");
+}
+```
+
+#### 🚀 API Endpoints (Planned):
+
+**Customer APIs:**
+```java
+// Single file upload
+POST /api/jobs/upload
+{
+  file: MultipartFile,
+  paperSize: "A4",
+  isColor: true,
+  isDoubleSided: false,
+  copies: 2
+}
+
+// Multi-file upload (same requirements)
+POST /api/jobs/batch-upload-same
+{
+  files: MultipartFile[],
+  paperSize: "A4",
+  isColor: true,
+  copies: 1
+}
+
+// Multi-file upload (different requirements)
+POST /api/jobs/batch-upload-different
+{
+  files: MultipartFile[],
+  requirements: "[{paperSize:'A4',isColor:true,copies:1},{paperSize:'A3',isColor:false,copies:2}]"
+}
+
+// Customer job history
+GET /api/jobs/history (JWT required)
+
+// Job status tracking
+GET /api/jobs/status/{trackingCode} (public - works for anonymous)
+```
+
+**Vendor APIs:**
+```java
+// Get assigned jobs
+GET /api/vendors/job-queue (JWT required)
+
+// Job status updates
+POST /api/jobs/{jobId}/accept    // Vendor accepts job
+POST /api/jobs/{jobId}/printing  // Started printing
+POST /api/jobs/{jobId}/ready     // Ready for pickup
+POST /api/jobs/{jobId}/complete  // Customer picked up
+POST /api/jobs/{jobId}/reject    // Vendor rejects job
+```
+
+**Anonymous APIs (QR Code):**
+```java
+// QR landing page
+GET /store/{storeCode}
+
+// Anonymous upload (only from QR page)
+POST /api/jobs/qr-anonymous-upload
+{
+  storeCode: "PW0001",
+  file: MultipartFile,
+  paperSize: "A4",
+  isColor: false,
+  copies: 1
+}
+```
+
+#### 🔧 MinIO Setup (Docker):
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"    # API
+      - "9001:9001"    # Console
+    environment:
+      MINIO_ACCESS_KEY: printwave-key
+      MINIO_SECRET_KEY: printwave-secret
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./minio-data:/data
+```
+
+#### 📱 Frontend Integration Examples:
+
+**JavaScript Single Upload:**
+```javascript
+const uploadFile = async (file, requirements) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('paperSize', requirements.paperSize);
+    formData.append('isColor', requirements.isColor);
+    
+    const response = await fetch('/api/jobs/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${jwt_token}` },
+        body: formData
+    });
+    
+    return await response.json(); // {trackingCode: "PJ123456", ...}
+};
+```
+
+**JavaScript Multi-Upload:**
+```javascript
+const uploadMultipleFiles = async (files, requirements) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    formData.append('paperSize', requirements.paperSize);
+    
+    const response = await fetch('/api/jobs/batch-upload-same', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${jwt_token}` },
+        body: formData
+    });
+    
+    return await response.json(); // {trackingCodes: ["PJ123456", "PJ123457"]}
+};
+```
+
+#### 🎯 Learning Concepts (For Beginners):
+
+**New Technologies:**
+- **MinIO**: S3-compatible object storage (free cloud storage)
+- **MultipartFile**: Spring Boot file upload handling
+- **JPA Relations**: Database entity relationships (@ManyToOne, @OneToMany)
+- **BigDecimal**: Precise decimal calculations for money
+- **Enums**: Fixed set of values (JobStatus, PaperSize, FileType)
+- **Docker Compose**: Container orchestration for MinIO
+
+**Design Patterns:**
+- **Service Layer**: Business logic separation (PrintJobService, FileStorageService)
+- **Repository Pattern**: Data access abstraction (PrintJobRepository)
+- **DTO Pattern**: Data transfer objects for API requests/responses
+- **Builder Pattern**: For complex object construction
+- **Strategy Pattern**: Different upload strategies (single/multi-file)
+
+**Best Practices:**
+- **Cloud Storage**: Never store files locally in production
+- **Money Handling**: Always use BigDecimal for financial calculations
+- **File Validation**: Check file type, size, content before processing
+- **Error Handling**: Comprehensive validation and user-friendly error messages
+- **Security**: JWT authentication, file access control
+- **Scalability**: Separate jobs for each file, cloud storage
+
+#### 🚀 Phase 3 Status: READY TO IMPLEMENT
+- **Foundation**: User and Vendor entities complete
+- **Authentication**: JWT system working
+- **Database**: PostgreSQL configured
+- **Email**: Service ready for notifications
+- **Next Step**: Create JobStatus enum and PrintJob entity
 
 ### Phase 4: Integration Features
 - [ ] Payment gateway integration
