@@ -2,7 +2,7 @@
 # Multi-stage build for optimal image size and performance
 
 # Stage 1: Build stage using Maven with Java 21
-FROM maven:3.9.4-eclipse-temurin-21 AS build
+FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
 # Copy Maven configuration
@@ -15,7 +15,9 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 
 # Build the application (skip tests for faster builds)
-RUN mvn clean package -DskipTests
+RUN mvn clean package -DskipTests \
+    -Dmaven.wagon.http.retryHandler.count=3 \
+    -Dmaven.wagon.http.pool=false
 
 # Stage 2: Runtime stage with Java 21 Temurin JRE
 FROM eclipse-temurin:21-jre-jammy
