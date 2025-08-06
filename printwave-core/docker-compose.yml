@@ -1,0 +1,105 @@
+services:
+  # 🗄️ PostgreSQL Database Service
+  postgres:
+    image: postgres:15
+    container_name: printwave-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: printwave_db
+      POSTGRES_USER: printwave_user
+      POSTGRES_PASSWORD: printwave123
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U printwave_user -d printwave_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - printwave-network
+
+  # 📁 MinIO Object Storage Service
+  minio:
+    image: minio/minio:latest
+    container_name: printwave-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: spoolr_admin
+      MINIO_ROOT_PASSWORD: spoolr_minioadmin@2025
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Web Console port
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - printwave-network
+
+  # 🚀 PrintWave Core API Service (Your Spring Boot App)
+  printwave-core:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: printwave-core
+    restart: unless-stopped
+    environment:
+      # Database connection (using container name 'postgres' as hostname)
+      DB_URL: jdbc:postgresql://postgres:5432/printwave_db
+      DB_USERNAME: printwave_user
+      DB_PASSWORD: printwave123
+      
+      # JPA/Hibernate Configuration
+      DDL_AUTO: update
+      SHOW_SQL: true
+      
+      # Server Configuration
+      SERVER_PORT: 8080
+      
+      # Email Configuration (using your Gmail config)
+      EMAIL_USERNAME: printwave.noreply@gmail.com
+      EMAIL_PASSWORD: hspywwztopifrwpv
+      
+      # JWT Configuration (using your secret)
+      JWT_SECRET: 0IzK14M6GmOWNqJWL6EPSeIzuALP6IpXXURnf1HSHuk=
+      
+      # MinIO Configuration (file storage)
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: spoolr_admin
+      MINIO_SECRET_KEY: spoolr_minioadmin@2025
+      MINIO_BUCKET_NAME: printwave-documents
+      
+      # Spring Profile for Docker environment
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - printwave-network
+    volumes:
+      - app_logs:/app/logs
+
+# 💾 Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  app_logs:
+    driver: local
+
+# 🌐 Custom network for service communication
+networks:
+  printwave-network:
+    driver: bridge

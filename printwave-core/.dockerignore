@@ -1,0 +1,58 @@
+# Docker ignore file to optimize build performance
+# These files/folders won't be sent to Docker build context
+
+# Compiled Java files
+target/
+*.class
+*.jar
+*.war
+
+# Maven files
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Environment and config files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Documentation
+README.md
+PROJECT_DESCRIPTION.md
+projectdescription.txt
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Node modules (if any frontend build tools are used)
+node_modules/
+
+# Test results
+test-results/

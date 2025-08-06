@@ -99,7 +99,12 @@
 			<scope>test</scope>
 		</dependency>
 
-
+		<!-- MinIO Java Client for Object Storage -->
+		<dependency>
+			<groupId>io.minio</groupId>
+			<artifactId>minio</artifactId>
+			<version>8.3.3</version>
+		</dependency>
 
 	</dependencies>
 
