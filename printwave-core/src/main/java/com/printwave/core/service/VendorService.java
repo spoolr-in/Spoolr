@@ -2,6 +2,8 @@ package com.printwave.core.service;
 
 import com.printwave.core.entity.Vendor;
 import com.printwave.core.repository.VendorRepository;
+import com.printwave.core.util.JwtUtil;
+import com.printwave.core.dto.VendorAuthResult; // Import the new DTO
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,9 @@ public class VendorService {
     
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
     
     /**
      * Register a new vendor with business details
@@ -28,24 +33,19 @@ public class VendorService {
      */
     @Transactional
     public Vendor registerVendor(Vendor vendor) {
-        // Check if vendor already exists
         if (vendorRepository.existsByEmail(vendor.getEmail())) {
             throw new RuntimeException("Vendor with email " + vendor.getEmail() + " already exists");
         }
         
-        // Set only system-generated values - user provides all business details
         vendor.setEmailVerified(false);
         vendor.setVerificationToken(UUID.randomUUID().toString());
         vendor.setActivationKeySent(false);
         
-        // Generate unique store code and QR URL
         vendor.setStoreCode(generateUniqueStoreCode());
         vendor.generateQRCodeUrl();
         
-        // Save vendor to database
         Vendor savedVendor = vendorRepository.save(vendor);
         
-        // Send verification email
         emailService.sendVendorVerificationEmail(savedVendor);
         
         return savedVendor;
@@ -57,21 +57,17 @@ public class VendorService {
      */
     @Transactional
     public Vendor verifyVendorEmail(String token) {
-        // Find vendor by verification token
         Vendor vendor = vendorRepository.findByVerificationToken(token)
             .orElseThrow(() -> new RuntimeException("Invalid verification token"));
         
-        // Mark vendor as verified and clear token
         vendor.setEmailVerified(true);
         vendor.setVerificationToken(null);
         
-        // Generate activation key for Station app
         vendor.setActivationKey(generateActivationKey());
         vendor.setActivationKeySent(true);
         
         Vendor savedVendor = vendorRepository.save(vendor);
         
-        // Send activation key email
         emailService.sendVendorActivationEmail(savedVendor);
         
         return savedVendor;
@@ -81,7 +77,7 @@ public class VendorService {
      * Authenticate vendor using activation key (for Station app)
      */
     @Transactional
-    public Vendor authenticateVendorByActivationKey(String activationKey) {
+    public VendorAuthResult authenticateVendorByActivationKey(String activationKey) {
         Vendor vendor = vendorRepository.findByActivationKey(activationKey)
             .orElseThrow(() -> new RuntimeException("Invalid activation key"));
         
@@ -93,11 +89,13 @@ public class VendorService {
             throw new RuntimeException("Email not verified. Please verify your email first.");
         }
         
-        // Update last login time and connection status
         vendor.setLastLoginAt(LocalDateTime.now());
         vendor.setStationAppConnected(true);
         
-        return vendorRepository.save(vendor);
+        vendorRepository.save(vendor);
+
+        String token = jwtUtil.generateToken(vendor.getEmail(), "VENDOR", vendor.getId());
+        return new VendorAuthResult(vendor, token);
     }
     
     /**
@@ -183,8 +181,6 @@ public class VendorService {
         return vendor.getIsActive() && 
                vendor.getEmailVerified() && 
                vendor.getIsStoreOpen();
-        // Note: Not requiring printer capabilities or station app connection
-        // This allows for testing and gradual setup
     }
     
     /**
@@ -237,7 +233,6 @@ public class VendorService {
     private String generateUniqueStoreCode() {
         String storeCode;
         do {
-            // Generate sequential store codes
             long count = vendorRepository.count();
             storeCode = String.format("PW%04d", count + 1);
         } while (vendorRepository.existsByStoreCode(storeCode));
@@ -305,12 +300,10 @@ public class VendorService {
      * This replaces the old station-login for first-time users
      */
     @Transactional
-    public Vendor firstTimeLoginWithPasswordSetup(String activationKey, String newPassword) {
-        // Find vendor by activation key
+    public VendorAuthResult firstTimeLoginWithPasswordSetup(String activationKey, String newPassword) {
         Vendor vendor = vendorRepository.findByActivationKey(activationKey)
             .orElseThrow(() -> new RuntimeException("Invalid activation key"));
         
-        // Validate vendor state
         if (!vendor.getIsActive()) {
             throw new RuntimeException("Vendor account is deactivated");
         }
@@ -323,21 +316,21 @@ public class VendorService {
             throw new RuntimeException("Password already set. Please use regular login.");
         }
         
-        // Validate password strength
         if (newPassword == null || newPassword.trim().length() < 6) {
             throw new RuntimeException("Password must be at least 6 characters long");
         }
         
-        // Hash and set password
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         vendor.setPasswordHash(encoder.encode(newPassword));
         vendor.setPasswordSet(true);
         
-        // Update login info
         vendor.setLastLoginAt(LocalDateTime.now());
         vendor.setStationAppConnected(true);
         
-        return vendorRepository.save(vendor);
+        vendorRepository.save(vendor);
+
+        String token = jwtUtil.generateToken(vendor.getEmail(), "VENDOR", vendor.getId());
+        return new VendorAuthResult(vendor, token);
     }
     
     /**
@@ -345,12 +338,10 @@ public class VendorService {
      * For vendors who have already set up their password
      */
     @Transactional
-    public Vendor loginWithStoreCodeAndPassword(String storeCode, String password) {
-        // Find vendor by store code
+    public VendorAuthResult loginWithStoreCodeAndPassword(String storeCode, String password) {
         Vendor vendor = vendorRepository.findByStoreCode(storeCode)
             .orElseThrow(() -> new RuntimeException("Invalid store code"));
         
-        // Validate vendor state
         if (!vendor.getIsActive()) {
             throw new RuntimeException("Vendor account is deactivated");
         }
@@ -363,17 +354,18 @@ public class VendorService {
             throw new RuntimeException("Password not set. Please use activation key for first-time login.");
         }
         
-        // Validate password
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         if (!encoder.matches(password, vendor.getPasswordHash())) {
             throw new RuntimeException("Invalid password");
         }
         
-        // Update login info
         vendor.setLastLoginAt(LocalDateTime.now());
         vendor.setStationAppConnected(true);
         
-        return vendorRepository.save(vendor);
+        vendorRepository.save(vendor);
+
+        String token = jwtUtil.generateToken(vendor.getEmail(), "VENDOR", vendor.getId());
+        return new VendorAuthResult(vendor, token);
     }
     
     /**
@@ -388,18 +380,15 @@ public class VendorService {
             throw new RuntimeException("No password set. Please use first-time login.");
         }
         
-        // Validate current password
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         if (!encoder.matches(currentPassword, vendor.getPasswordHash())) {
             throw new RuntimeException("Current password is incorrect");
         }
         
-        // Validate new password
         if (newPassword == null || newPassword.trim().length() < 6) {
             throw new RuntimeException("New password must be at least 6 characters long");
         }
         
-        // Update password
         vendor.setPasswordHash(encoder.encode(newPassword));
         
         return vendorRepository.save(vendor);
@@ -421,12 +410,10 @@ public class VendorService {
             throw new RuntimeException("Email not verified");
         }
         
-        // Validate new password
         if (newPassword == null || newPassword.trim().length() < 6) {
             throw new RuntimeException("Password must be at least 6 characters long");
         }
         
-        // Hash and set new password
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         vendor.setPasswordHash(encoder.encode(newPassword));
         vendor.setPasswordSet(true);

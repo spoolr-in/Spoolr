@@ -72,7 +72,7 @@ public interface PrintJobRepository extends JpaRepository<PrintJob, Long> {
      * Get all jobs assigned to a vendor (for Station app job queue)
      * Only shows jobs that need vendor action
      */
-    @Query("SELECT pj FROM PrintJob pj WHERE pj.vendor = :vendor AND pj.status IN ('MATCHED', 'ACCEPTED', 'PRINTING')")
+    @Query("SELECT pj FROM PrintJob pj WHERE pj.vendor = :vendor AND pj.status IN ('AWAITING_ACCEPTANCE', 'ACCEPTED', 'PRINTING')")
     List<PrintJob> findPendingJobsByVendor(@Param("vendor") Vendor vendor);
     
     /**

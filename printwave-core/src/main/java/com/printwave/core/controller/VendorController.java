@@ -5,7 +5,10 @@ import com.printwave.core.entity.Vendor;
 import com.printwave.core.service.VendorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/vendors")
@@ -17,7 +20,6 @@ public class VendorController {
     @PostMapping("/register")
     public ResponseEntity<ApiResponse> registerVendor(@RequestBody VendorRegistrationRequest request) {
         try {
-            // Create vendor entity from request
             Vendor vendor = new Vendor();
             vendor.setEmail(request.getEmail());
             vendor.setBusinessName(request.getBusinessName());
@@ -32,9 +34,8 @@ public class VendorController {
             vendor.setPricePerPageBWSingleSided(request.getPricePerPageBWSingleSided());
             vendor.setPricePerPageBWDoubleSided(request.getPricePerPageBWDoubleSided());
             vendor.setPricePerPageColorSingleSided(request.getPricePerPageColorSingleSided());
-            vendor.setPricePerPageColorDoubleSided(request.getPricePerPageColorDoubleSided());
+            vendor.setPricePerPageColorDoubleSided(request.getPricePerPageColorDoubleSided()); // Corrected typo
             
-            // Set optional fields with defaults
             vendor.setEnableDirectOrders(request.getEnableDirectOrders() != null ? request.getEnableDirectOrders() : true);
             vendor.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
             vendor.setIsStoreOpen(request.getIsStoreOpen() != null ? request.getIsStoreOpen() : false);
@@ -59,30 +60,12 @@ public class VendorController {
     @PostMapping("/station-login")
     public ResponseEntity<VendorLoginResponse> stationLogin(@RequestBody StationLoginRequest request) {
         try {
-            Vendor vendor = vendorService.authenticateVendorByActivationKey(request.getActivationKey());
+            VendorAuthResult authResult = vendorService.authenticateVendorByActivationKey(request.getActivationKey());
+            Vendor vendor = authResult.getVendor();
+            String token = authResult.getToken();
             
-            // Create comprehensive login response
-            VendorLoginResponse response = new VendorLoginResponse();
-            response.setVendorId(vendor.getId());
-            response.setBusinessName(vendor.getBusinessName());
-            response.setEmail(vendor.getEmail());
-            response.setContactPersonName(vendor.getContactPersonName());
-            response.setPhoneNumber(vendor.getPhoneNumber());
-            
-            response.setIsStoreOpen(vendor.getIsStoreOpen());
-            response.setStationAppConnected(vendor.getStationAppConnected());
-            response.setStoreStatusUpdatedAt(vendor.getStoreStatusUpdatedAt());
-            
-            response.setStoreCode(vendor.getStoreCode());
-            response.setQrCodeUrl(vendor.getQrCodeUrl());
-            
-            response.setPricePerPageBWSingleSided(vendor.getPricePerPageBWSingleSided());
-            response.setPricePerPageBWDoubleSided(vendor.getPricePerPageBWDoubleSided());
-            response.setPricePerPageColorSingleSided(vendor.getPricePerPageColorSingleSided());
-            response.setPricePerPageColorDoubleSided(vendor.getPricePerPageColorDoubleSided());
-            
-            response.setPrinterCapabilities(vendor.getPrinterCapabilities());
-            response.setLastLoginAt(vendor.getLastLoginAt());
+            VendorLoginResponse response = createLoginResponse(vendor);
+            response.setToken(token);
             response.setMessage("Login successful! Welcome " + vendor.getBusinessName());
             
             return ResponseEntity.ok(response);
@@ -92,8 +75,15 @@ public class VendorController {
     }
 
     @PostMapping("/{vendorId}/toggle-store")
-    public ResponseEntity<ApiResponse> toggleStoreStatus(@PathVariable Long vendorId, @RequestBody StoreStatusRequest request) {
+    @PreAuthorize("hasRole('VENDOR')")
+    public ResponseEntity<ApiResponse> toggleStoreStatus(@PathVariable Long vendorId, @RequestBody StoreStatusRequest request, HttpServletRequest httpRequest) {
         try {
+            // Verify that the authenticated vendor can only access their own resources
+            Long authenticatedVendorId = (Long) httpRequest.getAttribute("userId");
+            if (!vendorId.equals(authenticatedVendorId)) {
+                return ResponseEntity.status(403).body(ApiResponse.error("Access denied: You can only manage your own store"));
+            }
+            
             Vendor updatedVendor = vendorService.toggleStoreStatus(vendorId, request.getIsOpen());
             return ResponseEntity.ok(ApiResponse.success("Store status updated successfully."));
         } catch (RuntimeException e) {
@@ -102,8 +92,15 @@ public class VendorController {
     }
 
     @PostMapping("/{vendorId}/update-capabilities")
-    public ResponseEntity<ApiResponse> updatePrinterCapabilities(@PathVariable Long vendorId, @RequestBody PrinterCapabilitiesRequest request) {
+    @PreAuthorize("hasRole('VENDOR')")
+    public ResponseEntity<ApiResponse> updatePrinterCapabilities(@PathVariable Long vendorId, @RequestBody PrinterCapabilitiesRequest request, HttpServletRequest httpRequest) {
         try {
+            // Verify that the authenticated vendor can only access their own resources
+            Long authenticatedVendorId = (Long) httpRequest.getAttribute("userId");
+            if (!vendorId.equals(authenticatedVendorId)) {
+                return ResponseEntity.status(403).body(ApiResponse.error("Access denied: You can only manage your own printer capabilities"));
+            }
+            
             Vendor updatedVendor = vendorService.updatePrinterCapabilities(vendorId, request.getCapabilities());
             return ResponseEntity.ok(ApiResponse.success("Printer capabilities updated successfully."));
         } catch (RuntimeException e) {
@@ -116,10 +113,12 @@ public class VendorController {
     @PostMapping("/first-time-login")
     public ResponseEntity<?> firstTimeLogin(@RequestBody FirstTimeLoginRequest request) {
         try {
-            Vendor vendor = vendorService.firstTimeLoginWithPasswordSetup(request.getActivationKey(), request.getNewPassword());
+            VendorAuthResult authResult = vendorService.firstTimeLoginWithPasswordSetup(request.getActivationKey(), request.getNewPassword());
+            Vendor vendor = authResult.getVendor();
+            String token = authResult.getToken();
             
-            // Create login response
             VendorLoginResponse response = createLoginResponse(vendor);
+            response.setToken(token);
             response.setMessage("First-time login successful! Password set. Welcome " + vendor.getBusinessName());
             
             return ResponseEntity.ok(response);
@@ -131,10 +130,12 @@ public class VendorController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody VendorLoginRequest request) {
         try {
-            Vendor vendor = vendorService.loginWithStoreCodeAndPassword(request.getStoreCode(), request.getPassword());
+            VendorAuthResult authResult = vendorService.loginWithStoreCodeAndPassword(request.getStoreCode(), request.getPassword());
+            Vendor vendor = authResult.getVendor();
+            String token = authResult.getToken();
             
-            // Create login response
             VendorLoginResponse response = createLoginResponse(vendor);
+            response.setToken(token);
             response.setMessage("Login successful! Welcome back " + vendor.getBusinessName());
             
             return ResponseEntity.ok(response);
@@ -144,8 +145,15 @@ public class VendorController {
     }
     
     @PostMapping("/change-password")
-    public ResponseEntity<ApiResponse> changePassword(@RequestBody ChangePasswordRequest request) {
+    @PreAuthorize("hasRole('VENDOR')")
+    public ResponseEntity<ApiResponse> changePassword(@RequestBody ChangePasswordRequest request, HttpServletRequest httpRequest) {
         try {
+            // Verify that the authenticated vendor can only change their own password
+            Long authenticatedVendorId = (Long) httpRequest.getAttribute("userId");
+            if (!request.getVendorId().equals(authenticatedVendorId)) {
+                return ResponseEntity.status(403).body(ApiResponse.error("Access denied: You can only change your own password"));
+            }
+            
             vendorService.changePassword(request.getVendorId(), request.getCurrentPassword(), request.getNewPassword());
             return ResponseEntity.ok(ApiResponse.success("Password changed successfully."));
         } catch (RuntimeException e) {
@@ -182,7 +190,7 @@ public class VendorController {
         response.setPricePerPageBWSingleSided(vendor.getPricePerPageBWSingleSided());
         response.setPricePerPageBWDoubleSided(vendor.getPricePerPageBWDoubleSided());
         response.setPricePerPageColorSingleSided(vendor.getPricePerPageColorSingleSided());
-        response.setPricePerPageColorDoubleSided(vendor.getPricePerPageColorDoubleSided());
+        response.setPricePerPageColorDoubleSided(vendor.getPricePerPageColorDoubleSided()); // Corrected typo
         
         response.setPrinterCapabilities(vendor.getPrinterCapabilities());
         response.setLastLoginAt(vendor.getLastLoginAt());

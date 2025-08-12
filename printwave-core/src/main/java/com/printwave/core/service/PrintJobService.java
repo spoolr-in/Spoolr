@@ -15,32 +15,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.scheduling.TaskScheduler;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Collectors;
 
-/**
- * PrintJobService - Complete "Uber for Printing" business logic
- * 
- * 🚀 PRODUCTION-READY FEATURES:
- * ✅ Real page counting (PDF, DOCX, Images)
- * ✅ Advanced vendor matching (distance + capabilities + price)
- * ✅ Automatic job broadcasting to best vendors
- * ✅ Complete job lifecycle management
- * ✅ Price calculation with vendor rates
- * ✅ Error handling and transaction safety
- * 
- * 🎯 COMPLETE WORKFLOW:
- * 1. Customer uploads file → Real page counting + Cloud storage
- * 2. Advanced vendor matching → Distance + capabilities + pricing
- * 3. Automatic job assignment → Best vendor gets the job
- * 4. Station app integration → Vendor sees job in queue
- * 5. Job status tracking → UPLOADED → MATCHED → ACCEPTED → PRINTING → READY → COMPLETED
- * 6. File streaming → Vendor gets temporary URL for printing
- */
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
+
 @Service
 @Transactional
 public class PrintJobService {
@@ -48,65 +37,63 @@ public class PrintJobService {
     private final PrintJobRepository printJobRepository;
     private final VendorRepository vendorRepository;
     private final FileStorageService fileStorageService;
+    private final NotificationService notificationService;
+    private final TaskScheduler taskScheduler;
     private final Random random = new Random();
 
+    // A thread-safe map to keep track of the scheduled timeout tasks for each job.
+    // This allows us to cancel the timeout task if a vendor accepts or rejects the job.
+    private final Map<Long, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
     @Autowired
-    public PrintJobService(PrintJobRepository printJobRepository, 
+    public PrintJobService(PrintJobRepository printJobRepository,
                           VendorRepository vendorRepository,
-                          FileStorageService fileStorageService) {
+                          FileStorageService fileStorageService,
+                          NotificationService notificationService,
+                          TaskScheduler taskScheduler) {
         this.printJobRepository = printJobRepository;
         this.vendorRepository = vendorRepository;
         this.fileStorageService = fileStorageService;
+        this.notificationService = notificationService;
+        this.taskScheduler = taskScheduler;
     }
 
-    /**
-     * 🚀 MAIN API: Create complete print job with advanced matching
-     * 
-     * Complete workflow in one transaction:
-     * 1. Upload file to MinIO cloud storage
-     * 2. Count actual pages using PDF/DOCX libraries
-     * 3. Find best vendor using advanced matching algorithm
-     * 4. Calculate exact pricing based on vendor rates
-     * 5. Create PrintJob with all details
-     * 6. Generate tracking code for customer
-     * 
-     * @param file The document file (PDF, DOCX, JPG, PNG)
-     * @param customer The authenticated customer (null for QR code/anonymous)
-     * @param paperSize Paper size (A4, A3, LETTER, LEGAL)
-     * @param isColor Color printing (true/false)
-     * @param isDoubleSided Double-sided printing (true/false)
-     * @param copies Number of copies (1-100)
-     * @param customerLatitude Customer location for vendor matching
-     * @param customerLongitude Customer location for vendor matching
-     * @return Complete PrintJob with vendor assignment and pricing
-     */
-    public PrintJob createPrintJob(MultipartFile file, 
+    public PrintJob createPrintJob(MultipartFile file,
                                   User customer,
                                   PaperSize paperSize,
                                   boolean isColor,
                                   boolean isDoubleSided,
                                   int copies,
                                   Double customerLatitude,
-                                  Double customerLongitude) {
-        
-        // Validate input parameters
+                                  Double customerLongitude,
+                                  Long manualVendorId) {
+
         validateJobRequest(file, paperSize, copies, customerLatitude, customerLongitude);
-        
-        // Create temporary PrintJob to get ID for file naming
+
+        // Generate a unique identifier for the file before saving the PrintJob
+        String fileIdentifier = UUID.randomUUID().toString();
+
+        // Declare printJob outside try-catch so it's accessible in catch block
         PrintJob printJob = new PrintJob();
-        printJob.setStatus(JobStatus.UPLOADED);
-        printJob.setCustomer(customer);
-        printJob = printJobRepository.save(printJob); // Get ID for file naming
-        
+
         try {
-            // 1. Upload file to MinIO cloud storage
-            FileStorageService.FileUploadResult uploadResult = 
-                fileStorageService.uploadFile(file, printJob.getId());
-            
-            // 2. Count actual pages in document
+            // Upload file to MinIO cloud storage using the generated identifier
+            FileStorageService.FileUploadResult uploadResult = fileStorageService.uploadFile(file, fileIdentifier);
             int totalPages = countDocumentPages(file, uploadResult.getFileType());
-            
-            // 3. Set file information in print job
+
+            // Calculate pricing before creating the PrintJob object
+            // This is a temporary calculation for the initial save, actual pricing will be set during vendor matching
+            // We need to ensure these are non-null for the first save.
+            BigDecimal tempPricePerPage = BigDecimal.ZERO; // Placeholder
+            BigDecimal tempTotalPrice = BigDecimal.ZERO; // Placeholder
+
+            // Populate ALL non-nullable fields before the first save
+            printJob.setStatus(JobStatus.UPLOADED);
+            printJob.setCustomer(customer);
+            printJob.setPaperSize(paperSize);
+            printJob.setIsColor(isColor);
+            printJob.setIsDoubleSided(isDoubleSided);
+            printJob.setCopies(copies);
             printJob.setOriginalFileName(uploadResult.getOriginalFileName());
             printJob.setStoredFileName(uploadResult.getStoredFileName());
             printJob.setS3BucketName(uploadResult.getBucketName());
@@ -114,440 +101,529 @@ public class PrintJobService {
             printJob.setFileType(uploadResult.getFileType());
             printJob.setFileSizeBytes(uploadResult.getFileSizeBytes());
             printJob.setTotalPages(totalPages);
-            
-            // 4. Set print specifications
-            printJob.setPaperSize(paperSize);
-            printJob.setIsColor(isColor);
-            printJob.setIsDoubleSided(isDoubleSided);
-            printJob.setCopies(copies);
-            
-            // 5. Generate unique tracking code
-            String trackingCode = generateUniqueTrackingCode();
-            printJob.setTrackingCode(trackingCode);
-            
-            // 6. Advanced vendor matching and pricing
-            VendorMatch bestMatch = findBestVendorMatch(
-                customerLatitude, customerLongitude, 
-                paperSize, isColor, isDoubleSided,
-                totalPages, copies
-            );
-            
-            if (bestMatch != null) {
-                // Vendor found - assign and price the job
-                printJob.setVendor(bestMatch.getVendor());
-                printJob.setPricePerPage(bestMatch.getPricePerPage());
-                printJob.setTotalPrice(bestMatch.getTotalPrice());
-                printJob.setStatus(JobStatus.MATCHED);
-                printJob.setMatchedAt(LocalDateTime.now());
+            printJob.setTrackingCode(generateUniqueTrackingCode());
+            printJob.setPricePerPage(tempPricePerPage); // Set temporary price
+            printJob.setTotalPrice(tempTotalPrice);     // Set temporary total price
+
+            // Save the PrintJob for the first time (all non-nullable fields are now set)
+            printJob = printJobRepository.save(printJob);
+
+            // Now proceed with vendor matching and update the job with actual prices
+            if (manualVendorId != null) {
+                startVendorOfferProcess(printJob, customerLatitude, customerLongitude, new ArrayList<>(), manualVendorId);
             } else {
-                // No suitable vendor found - manual matching required
-                printJob.setStatus(JobStatus.PROCESSING);
-                printJob.setPricePerPage(BigDecimal.ZERO);
-                printJob.setTotalPrice(BigDecimal.ZERO);
+                startVendorOfferProcess(printJob, customerLatitude, customerLongitude, new ArrayList<>(), null);
             }
-            
-            // 7. Save complete print job
-            return printJobRepository.save(printJob);
-            
+
+            return printJob;
+
         } catch (Exception e) {
-            // Transaction rollback - cleanup database record
-            printJobRepository.delete(printJob);
+            // If anything goes wrong, delete the partially created job and re-throw
+            // Note: File in MinIO might remain, consider adding cleanup for failed uploads
+            if (printJob != null && printJob.getId() != null && printJobRepository.existsById(printJob.getId())) {
+                printJobRepository.delete(printJob);
+            }
             throw new RuntimeException("Failed to create print job: " + e.getMessage(), e);
         }
     }
-    
-    /**
-     * 📄 REAL PAGE COUNTING - Production implementation
-     * 
-     * Counts actual pages using professional libraries:
-     * - PDF: Apache PDFBox (most accurate)
-     * - DOCX: Apache POI (estimates based on content)
-     * - Images: Always 1 page
-     * 
-     * @param file The uploaded file
-     * @param fileType Detected file type
-     * @return Actual number of pages
-     */
+
+    public void startVendorOfferProcess(PrintJob job, Double customerLat, Double customerLon, List<Long> excludedVendorIds, Long manualVendorId) {
+        List<VendorMatch> bestMatches;
+
+        if (manualVendorId != null) {
+            Vendor vendor = vendorRepository.findById(manualVendorId)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid vendor ID selected."));
+            VendorMatch match = calculateVendorMatch(vendor, customerLat, customerLon, job.getIsColor(), job.getIsDoubleSided(), job.getTotalPages(), job.getCopies());
+            bestMatches = (match != null) ? List.of(match) : new ArrayList<>();
+        } else {
+            bestMatches = findBestVendorMatches(job, customerLat, customerLon, excludedVendorIds);
+        }
+
+        if (bestMatches.isEmpty()) {
+            job.setStatus(JobStatus.NO_VENDORS_AVAILABLE);
+            printJobRepository.save(job);
+            notificationService.notifyCustomerOfStatusUpdate(job.getTrackingCode(), job.getStatus().name(), "We couldn't find any available vendors for your print job.");
+            return;
+        }
+
+        VendorMatch bestMatch = bestMatches.get(0);
+        Vendor vendor = bestMatch.getVendor();
+
+        job.setVendor(vendor);
+        job.setPricePerPage(bestMatch.getPricePerPage());
+        job.setTotalPrice(bestMatch.getTotalPrice());
+        job.setStatus(JobStatus.AWAITING_ACCEPTANCE);
+        job.setMatchedAt(LocalDateTime.now());
+        printJobRepository.save(job);
+
+        notificationService.notifyVendorOfNewJob(vendor.getId(), job);
+
+        ScheduledFuture<?> timeoutTask = taskScheduler.schedule(
+                () -> handleVendorTimeout(job.getId(), vendor.getId(), customerLat, customerLon, excludedVendorIds, manualVendorId),
+                Instant.now().plusSeconds(90)
+        );
+        scheduledTasks.put(job.getId(), timeoutTask);
+    }
+
+    public void handleVendorTimeout(Long jobId, Long vendorId, Double customerLat, Double customerLon, List<Long> excludedVendorIds, Long manualVendorId) {
+        Optional<PrintJob> jobOpt = printJobRepository.findById(jobId);
+        if (jobOpt.isPresent()) {
+            PrintJob job = jobOpt.get();
+            if (job.getStatus() == JobStatus.AWAITING_ACCEPTANCE && job.getVendor().getId().equals(vendorId)) {
+                job.setStatus(JobStatus.VENDOR_TIMEOUT);
+                printJobRepository.save(job);
+
+                if (manualVendorId == null) {
+                    List<Long> newExcludedIds = new ArrayList<>(excludedVendorIds);
+                    newExcludedIds.add(vendorId);
+                    startVendorOfferProcess(job, customerLat, customerLon, newExcludedIds, null);
+                } else {
+                    notificationService.notifyCustomerOfStatusUpdate(job.getTrackingCode(), job.getStatus().name(), "The selected vendor did not respond in time.");
+                }
+            }
+        }
+        scheduledTasks.remove(jobId);
+    }
+
+    public PrintJob acceptJob(Long jobId, Vendor vendor) {
+        PrintJob job = getJobForVendor(jobId, vendor);
+
+        if (job.getStatus() != JobStatus.AWAITING_ACCEPTANCE) {
+            throw new RuntimeException("Job cannot be accepted in its current state: " + job.getStatus());
+        }
+
+        // Cancel the scheduled timeout task since the vendor has responded.
+        cancelTimeoutTask(jobId);
+
+        job.setStatus(JobStatus.ACCEPTED);
+        job.setAcceptedAt(LocalDateTime.now());
+        printJobRepository.save(job);
+
+        // 🎉 Enhanced notification with both WebSocket and Email!
+        notificationService.notifyCustomerJobAccepted(job);
+
+        return job;
+    }
+
+    public PrintJob rejectJob(Long jobId, Vendor vendor) {
+        PrintJob job = getJobForVendor(jobId, vendor);
+
+        if (job.getStatus() != JobStatus.AWAITING_ACCEPTANCE) {
+            throw new RuntimeException("Job cannot be rejected in its current state: " + job.getStatus());
+        }
+
+        cancelTimeoutTask(jobId);
+
+        job.setStatus(JobStatus.VENDOR_REJECTED);
+        printJobRepository.save(job);
+
+        startVendorOfferProcess(job, vendor.getLatitude(), vendor.getLongitude(), List.of(vendor.getId()), null);
+
+        return job;
+    }
+
+    private void cancelTimeoutTask(Long jobId) {
+        ScheduledFuture<?> timeoutTask = scheduledTasks.get(jobId);
+        if (timeoutTask != null) {
+            timeoutTask.cancel(false);
+            scheduledTasks.remove(jobId);
+        }
+    }
+
+    private List<VendorMatch> findBestVendorMatches(PrintJob job, Double customerLat, Double customerLon, List<Long> excludedVendorIds) {
+        List<Vendor> eligibleVendors = getEligibleVendors(job.getPaperSize(), job.getIsColor()).stream()
+                .filter(v -> !excludedVendorIds.contains(v.getId()))
+                .collect(Collectors.toList());
+
+        if (eligibleVendors.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<VendorMatch> vendorMatches = eligibleVendors.stream()
+                .map(vendor -> calculateVendorMatch(vendor, customerLat, customerLon, job.getIsColor(), job.getIsDoubleSided(), job.getTotalPages(), job.getCopies()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        vendorMatches.sort(Comparator.comparingDouble(VendorMatch::getMatchScore));
+
+        return vendorMatches;
+    }
+
     public int countDocumentPages(MultipartFile file, FileType fileType) {
         try {
             switch (fileType) {
                 case PDF:
-                    return countPdfPages(file);
+                    try (PDDocument document = PDDocument.load(file.getInputStream())) {
+                        return document.getNumberOfPages();
+                    }
                 case DOCX:
-                    return countDocxPages(file);
-                case JPG:
-                case PNG:
-                    return 1; // Images are always 1 page
+                    try (XWPFDocument document = new XWPFDocument(file.getInputStream())) {
+                        return Math.max(1, (int) Math.ceil(document.getParagraphs().stream().mapToInt(p -> p.getText().length()).sum() / 2000.0));
+                    }
                 default:
-                    return 1; // Default fallback
+                    return 1;
             }
         } catch (Exception e) {
-            // If page counting fails, assume 1 page and log error
             System.err.println("Page counting failed for file: " + file.getOriginalFilename() + " - " + e.getMessage());
             return 1;
         }
     }
-    
-    /**
-     * Count pages in PDF using Apache PDFBox
-     */
-    private int countPdfPages(MultipartFile file) throws Exception {
-        try (PDDocument document = PDDocument.load(file.getInputStream())) {
-            return document.getNumberOfPages();
-        }
-    }
-    
-    /**
-     * Count pages in DOCX using Apache POI
-     * Note: DOCX page counting is estimated based on content length
-     */
-    private int countDocxPages(MultipartFile file) throws Exception {
-        try (XWPFDocument document = new XWPFDocument(file.getInputStream())) {
-            // Estimate pages based on content
-            int totalChars = document.getParagraphs().stream()
-                    .mapToInt(paragraph -> paragraph.getText().length())
-                    .sum();
-            
-            // Rough estimate: 2000 characters per page (depends on font, spacing, etc.)
-            int estimatedPages = Math.max(1, (int) Math.ceil(totalChars / 2000.0));
-            
-            return estimatedPages;
-        }
-    }
-    
-    /**
-     * 🎯 ADVANCED VENDOR MATCHING ALGORITHM
-     * 
-     * Sophisticated matching based on:
-     * 1. Distance (closest vendors first)
-     * 2. Store status (only open stores)
-     * 3. Printer capabilities (paper size, color support)
-     * 4. Pricing (competitive rates)
-     * 5. Vendor rating (future enhancement)
-     * 
-     * @return Best vendor match with pricing details
-     */
-    private VendorMatch findBestVendorMatch(Double customerLat, Double customerLon,
-                                          PaperSize paperSize, boolean isColor, boolean isDoubleSided,
-                                          int totalPages, int copies) {
-        
-        // Get all eligible vendors
-        List<Vendor> eligibleVendors = getEligibleVendors(paperSize, isColor);
-        
-        if (eligibleVendors.isEmpty()) {
-            return null;
-        }
-        
-        // Calculate matches with distance and pricing
-        List<VendorMatch> vendorMatches = eligibleVendors.stream()
-                .map(vendor -> calculateVendorMatch(vendor, customerLat, customerLon, 
-                                                  isColor, isDoubleSided, totalPages, copies))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        
-        if (vendorMatches.isEmpty()) {
-            return null;
-        }
-        
-        // Sort by score (distance + price + availability)
-        vendorMatches.sort(Comparator.comparingDouble(VendorMatch::getMatchScore));
-        
-        // Return best match
-        return vendorMatches.get(0);
-    }
-    
-    /**
-     * Get vendors eligible for this print job
-     */
+
     private List<Vendor> getEligibleVendors(PaperSize paperSize, boolean isColor) {
-        return vendorRepository.findAll().stream()
-                .filter(this::isVendorActive)
-                .filter(vendor -> supportsJobRequirements(vendor, paperSize, isColor))
+        System.out.println("\n--- DEBUG: Entering getEligibleVendors ---");
+        List<Vendor> allVendors = vendorRepository.findAll();
+        System.out.println("Step 1: Found " + allVendors.size() + " total vendors in DB.");
+
+        List<Vendor> activeVendors = allVendors.stream()
+                .filter(v -> {
+                    boolean isEligible = Boolean.TRUE.equals(v.getEmailVerified()) && Boolean.TRUE.equals(v.getIsStoreOpen()) && Boolean.TRUE.equals(v.getIsActive());
+                    if (!isEligible) {
+                        System.out.println("  - Filtering out Vendor ID: " + v.getId() + " (is_active:" + v.getIsActive() + ", is_store_open:" + v.getIsStoreOpen() + ", email_verified:" + v.getEmailVerified() + ")");
+                    }
+                    return isEligible;
+                })
                 .collect(Collectors.toList());
+        System.out.println("Step 2: Found " + activeVendors.size() + " vendors after checking active/open/verified status.");
+
+        List<Vendor> capableVendors = activeVendors.stream()
+                .filter(v -> supportsJobRequirements(v, paperSize, isColor))
+                .collect(Collectors.toList());
+        System.out.println("Step 3: Found " + capableVendors.size() + " vendors after checking job requirements.");
+        System.out.println("--- DEBUG: Exiting getEligibleVendors ---\n");
+        return capableVendors;
     }
-    
-    /**
-     * Check if vendor is active and available
-     */
-    private boolean isVendorActive(Vendor vendor) {
-        return vendor.getEmailVerified() != null && vendor.getEmailVerified() &&
-               vendor.getIsStoreOpen() != null && vendor.getIsStoreOpen() &&
-               vendor.getIsActive() != null && vendor.getIsActive();
-    }
-    
-    /**
-     * Check if vendor supports job requirements
-     * TODO: Implement actual printer capability checking from JSON
-     */
+
     private boolean supportsJobRequirements(Vendor vendor, PaperSize paperSize, boolean isColor) {
-        // For now, assume all vendors support all paper sizes and color
-        // In production, you'd parse vendor.getPrinterCapabilities() JSON
-        // and check for specific paper size and color support
+        String capabilitiesJson = vendor.getPrinterCapabilities();
+        if (capabilitiesJson == null || capabilitiesJson.isBlank()) {
+            System.out.println("  - Vendor ID: " + vendor.getId() + " has no capabilities set. Assuming TRUE.");
+            return true;
+        }
+        // TODO: Implement full JSON parsing logic here based on the agreed-upon structure.
         return true;
     }
-    
-    /**
-     * Calculate vendor match with scoring
-     */
-    private VendorMatch calculateVendorMatch(Vendor vendor, Double customerLat, Double customerLon,
-                                           boolean isColor, boolean isDoubleSided, 
-                                           int totalPages, int copies) {
+
+    private VendorMatch calculateVendorMatch(Vendor vendor, Double customerLat, Double customerLon, boolean isColor, boolean isDoubleSided, int totalPages, int copies) {
         try {
-            // Calculate distance (Haversine formula)
-            double distance = calculateDistance(
-                customerLat, customerLon, 
-                vendor.getLatitude(), vendor.getLongitude()
-            );
-            
-            // Skip vendors too far away (>20km)
-            if (distance > 20.0) {
-                return null;
-            }
-            
-            // Calculate pricing
+            double distance = calculateDistance(customerLat, customerLon, vendor.getLatitude(), vendor.getLongitude());
+            if (distance > 20.0) return null;
+
             BigDecimal pricePerPage = getVendorPricePerPage(vendor, isColor, isDoubleSided);
             BigDecimal totalPrice = calculateTotalPrice(pricePerPage, totalPages, copies);
-            
-            // Calculate match score (lower is better)
             double matchScore = calculateMatchScore(distance, totalPrice);
-            
+
             return new VendorMatch(vendor, distance, pricePerPage, totalPrice, matchScore);
-            
         } catch (Exception e) {
-            System.err.println("Error calculating match for vendor " + vendor.getId() + ": " + e.getMessage());
             return null;
         }
     }
-    
-    /**
-     * Calculate distance between two points using Haversine formula
-     * Returns distance in kilometers
-     */
+
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         final double EARTH_RADIUS_KM = 6371.0;
-        
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);
-        
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        
         return EARTH_RADIUS_KM * c;
     }
-    
-    /**
-     * Calculate match score (lower is better)
-     * Combines distance and price factors
-     */
+
     private double calculateMatchScore(double distance, BigDecimal totalPrice) {
-        // Normalize factors (you can adjust weights)
-        double distanceScore = distance * 0.7; // 70% weight to distance
-        double priceScore = totalPrice.doubleValue() * 0.3; // 30% weight to price
-        
-        return distanceScore + priceScore;
+        return distance * 0.7 + totalPrice.doubleValue() * 0.3;
     }
-    
-    // ===== JOB STATUS MANAGEMENT =====
-    
-    /**
-     * ✅ Vendor accepts a print job
-     */
-    public PrintJob acceptJob(Long jobId, Vendor vendor) {
-        PrintJob job = getJobForVendor(jobId, vendor);
-        
-        if (job.getStatus() != JobStatus.MATCHED) {
-            throw new RuntimeException("Job cannot be accepted in current status: " + job.getStatus());
+
+    public List<Map<String, Object>> getQuoteForJob(MultipartFile file, String paperSizeStr, boolean isColor, boolean isDoubleSided, int copies, double customerLatitude, double customerLongitude) throws Exception {
+        System.out.println("\n--- DEBUG: Entering getQuoteForJob ---");
+        System.out.println("  - Job Params: paperSize=" + paperSizeStr + ", isColor=" + isColor + ", copies=" + copies);
+
+        PaperSize paperSize = PaperSize.fromString(paperSizeStr);
+        validateJobRequest(file, paperSize, copies, customerLatitude, customerLongitude);
+
+        FileType fileType = fileStorageService.detectFileType(file);
+        int totalPages = countDocumentPages(file, fileType);
+        System.out.println("  - Detected File Type: " + fileType + ", Total Pages: " + totalPages);
+
+        List<Vendor> eligibleVendors = getEligibleVendors(paperSize, isColor);
+
+        if (eligibleVendors.isEmpty()) {
+            System.out.println("  - No eligible vendors found. Returning empty list.");
+            return new ArrayList<>();
         }
-        
-        job.setStatus(JobStatus.ACCEPTED);
-        job.setAcceptedAt(LocalDateTime.now());
-        
-        return printJobRepository.save(job);
+
+        System.out.println("  - Mapping " + eligibleVendors.size() + " eligible vendors to quotes...");
+        List<Map<String, Object>> quotes = eligibleVendors.stream()
+            .map(vendor -> {
+                try {
+                    double distance = calculateDistance(customerLatitude, customerLongitude, vendor.getLatitude(), vendor.getLongitude());
+                    System.out.println("    - Processing Vendor ID: " + vendor.getId() + ", Distance: " + distance);
+                    if (distance > 20.0) {
+                        System.out.println("      - Vendor is too far. Skipping.");
+                        return null;
+                    }
+
+                    BigDecimal pricePerPage = getVendorPricePerPage(vendor, isColor, isDoubleSided);
+                    if (pricePerPage == null) {
+                        System.out.println("      - Vendor ID: " + vendor.getId() + " has NULL price for this job type. Skipping.");
+                        return null;
+                    }
+                    BigDecimal totalPrice = calculateTotalPrice(pricePerPage, totalPages, copies);
+                    System.out.println("      - Vendor ID: " + vendor.getId() + ", Price: " + totalPrice);
+
+                    Map<String, Object> quote = new HashMap<>();
+                    quote.put("vendorId", vendor.getId());
+                    quote.put("businessName", vendor.getBusinessName());
+                    quote.put("distance", String.format("%.2f km", distance));
+                    quote.put("price", totalPrice.setScale(2, RoundingMode.HALF_UP).toString());
+                    quote.put("address", vendor.getBusinessAddress());
+                    quote.put("rating", 5.0); // Placeholder
+                    return quote;
+                } catch (Exception e) {
+                    System.err.println("    - ERROR processing vendor ID: " + vendor.getId() + " - " + e.getMessage());
+                    return null;
+                }
+            })
+            .filter(Objects::nonNull)
+            .sorted(Comparator.comparingDouble(q -> Double.parseDouble(((String) ((Map<String, Object>) q).get("distance")).replace(" km", "")))
+                              .thenComparing(q -> new BigDecimal((String) ((Map<String, Object>) q).get("price"))))
+            .collect(Collectors.toList());
+
+        System.out.println("--- DEBUG: Exiting getQuoteForJob, returning " + quotes.size() + " quotes.---\n");
+        return quotes;
     }
-    
-    /**
-     * 🖨️ Mark job as printing
-     */
+
     public PrintJob startPrinting(Long jobId, Vendor vendor) {
         PrintJob job = getJobForVendor(jobId, vendor);
-        
-        if (job.getStatus() != JobStatus.ACCEPTED) {
-            throw new RuntimeException("Job must be accepted before printing");
-        }
+        if (job.getStatus() != JobStatus.ACCEPTED) throw new RuntimeException("Job must be accepted before printing");
         
         job.setStatus(JobStatus.PRINTING);
         job.setPrintingAt(LocalDateTime.now());
+        PrintJob savedJob = printJobRepository.save(job);
         
-        return printJobRepository.save(job);
+        // 🚀 AUTOMATIC STATUS PROGRESSION
+        // Calculate estimated printing time based on job complexity
+        int estimatedPrintingMinutes = calculatePrintingTime(job);
+        
+        // Schedule automatic transition to READY status
+        ScheduledFuture<?> autoPrintingTask = taskScheduler.schedule(
+            () -> autoProgressToReady(jobId),
+            Instant.now().plusSeconds(estimatedPrintingMinutes * 60)
+        );
+        
+        // Store the scheduled task so it can be cancelled if needed
+        scheduledTasks.put(jobId, autoPrintingTask);
+        
+        // 🔧 FIXED: Ensure customer data is fully loaded before async notification
+        // Reload the job with customer data to prevent Hibernate session issues
+        PrintJob jobWithCustomer = printJobRepository.findById(savedJob.getId())
+            .orElse(savedJob);
+        
+        // 🖨️ Enhanced notification for printing start (WebSocket + Email!)
+        notificationService.notifyCustomerJobPrinting(jobWithCustomer, estimatedPrintingMinutes);
+        
+        return savedJob;
     }
     
     /**
-     * 📄 Mark job as ready for pickup
+     * Automatically progress job from PRINTING to READY
      */
+    @Transactional
+    public void autoProgressToReady(Long jobId) {
+        try {
+            Optional<PrintJob> jobOpt = printJobRepository.findById(jobId);
+            if (jobOpt.isPresent()) {
+                PrintJob job = jobOpt.get();
+                
+                // Only auto-progress if still in PRINTING status
+                if (job.getStatus() == JobStatus.PRINTING) {
+                    job.setStatus(JobStatus.READY);
+                    job.setReadyAt(LocalDateTime.now());
+                    PrintJob savedJob = printJobRepository.save(job);
+                    
+                    // 🔧 FIXED: Force loading of all related entities before async notification
+                    // This prevents Hibernate proxy issues in scheduled tasks
+                    if (savedJob.getCustomer() != null) {
+                        // Force loading customer data
+                        String customerEmail = savedJob.getCustomer().getEmail();
+                        String customerName = savedJob.getCustomer().getName();
+                    }
+                    if (savedJob.getVendor() != null) {
+                        // Force loading vendor data
+                        String vendorName = savedJob.getVendor().getBusinessName();
+                        String vendorAddress = savedJob.getVendor().getBusinessAddress();
+                    }
+                    
+                    // ✅ Enhanced notification that job is ready for pickup (WebSocket + Email!)
+                    // This is THE MOST IMPORTANT notification - customers get emails even when offline!
+                    notificationService.notifyCustomerJobReadyForPickup(savedJob);
+                    
+                    // Schedule auto-completion after 24 hours if not picked up
+                    ScheduledFuture<?> autoCompleteTask = taskScheduler.schedule(
+                        () -> autoCompleteJob(jobId),
+                        Instant.now().plusSeconds(24 * 60 * 60) // 24 hours
+                    );
+                    scheduledTasks.put(jobId, autoCompleteTask);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error in autoProgressToReady for job " + jobId + ": " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            scheduledTasks.remove(jobId);
+        }
+    }
+    
+    /**
+     * Automatically complete job after extended period (24 hours) if not manually completed
+     */
+    private void autoCompleteJob(Long jobId) {
+        try {
+            Optional<PrintJob> jobOpt = printJobRepository.findById(jobId);
+            if (jobOpt.isPresent()) {
+                PrintJob job = jobOpt.get();
+                
+                // Only auto-complete if still in READY status
+                if (job.getStatus() == JobStatus.READY) {
+                    job.setStatus(JobStatus.COMPLETED);
+                    job.setCompletedAt(LocalDateTime.now());
+                    printJobRepository.save(job);
+                    
+                    // ✅ Enhanced final notification (WebSocket + Email!)
+                    notificationService.notifyCustomerJobCompleted(job);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error in autoCompleteJob for job " + jobId + ": " + e.getMessage());
+        } finally {
+            scheduledTasks.remove(jobId);
+        }
+    }
+    
+    /**
+     * Calculate estimated printing time based on job complexity
+     */
+    private int calculatePrintingTime(PrintJob job) {
+        int baseTimeMinutes = 2; // Base time for any job
+        int timePerPage = job.getIsColor() ? 1 : 0; // 1 minute per color page, 0 for B&W
+        int timeForCopies = (job.getCopies() - 1) * 1; // 1 minute per additional copy
+        int totalPages = job.getTotalPages() * job.getCopies();
+        
+        // More pages = more time
+        int pageTimeMinutes = totalPages * (job.getIsColor() ? 1 : 0) + (totalPages / 5);
+        
+        int totalTime = baseTimeMinutes + pageTimeMinutes + timeForCopies;
+        
+        // Minimum 1 minute, maximum 30 minutes
+        return Math.min(Math.max(totalTime, 1), 30);
+    }
+
     public PrintJob markJobReady(Long jobId, Vendor vendor) {
         PrintJob job = getJobForVendor(jobId, vendor);
-        
-        if (job.getStatus() != JobStatus.PRINTING) {
-            throw new RuntimeException("Job must be printing before marking ready");
-        }
-        
+        if (job.getStatus() != JobStatus.PRINTING) throw new RuntimeException("Job must be printing before marking ready");
         job.setStatus(JobStatus.READY);
         job.setReadyAt(LocalDateTime.now());
+        PrintJob savedJob = printJobRepository.save(job);
         
-        return printJobRepository.save(job);
-    }
-    
-    /**
-     * ✅ Complete job (customer picked up)
-     */
-    public PrintJob completeJob(Long jobId, Vendor vendor) {
-        PrintJob job = getJobForVendor(jobId, vendor);
+        // 🎯 FIXED: Send notification when manually marked as ready
+        // ✅ Enhanced notification that job is ready for pickup (WebSocket + Email!)
+        // This is THE MOST IMPORTANT notification - customers get emails even when offline!
+        notificationService.notifyCustomerJobReadyForPickup(savedJob);
         
-        if (job.getStatus() != JobStatus.READY) {
-            throw new RuntimeException("Job must be ready before completing");
+        // Cancel any pending auto-progression task since it's now manually ready
+        ScheduledFuture<?> pendingTask = scheduledTasks.remove(jobId);
+        if (pendingTask != null && !pendingTask.isDone()) {
+            pendingTask.cancel(false);
         }
         
+        // Schedule auto-completion after 24 hours if not picked up
+        ScheduledFuture<?> autoCompleteTask = taskScheduler.schedule(
+            () -> autoCompleteJob(jobId),
+            Instant.now().plusSeconds(24 * 60 * 60) // 24 hours
+        );
+        scheduledTasks.put(jobId, autoCompleteTask);
+        
+        return savedJob;
+    }
+
+    public PrintJob completeJob(Long jobId, Vendor vendor) {
+        PrintJob job = getJobForVendor(jobId, vendor);
+        if (job.getStatus() != JobStatus.READY) throw new RuntimeException("Job must be ready before completing");
         job.setStatus(JobStatus.COMPLETED);
         job.setCompletedAt(LocalDateTime.now());
+        PrintJob savedJob = printJobRepository.save(job);
         
-        return printJobRepository.save(job);
+        // 🎯 FIXED: Send notification when manually completed
+        // ✅ Enhanced final notification (WebSocket + Email!)
+        notificationService.notifyCustomerJobCompleted(savedJob);
+        
+        // Cancel any pending auto-completion task since it's now manually completed
+        ScheduledFuture<?> pendingTask = scheduledTasks.remove(jobId);
+        if (pendingTask != null && !pendingTask.isDone()) {
+            pendingTask.cancel(false);
+        }
+        
+        return savedJob;
     }
-    
-    // ===== QUERY METHODS =====
-    
+
     public Optional<PrintJob> getJobByTrackingCode(String trackingCode) {
         return printJobRepository.findByTrackingCode(trackingCode);
     }
-    
+
     public List<PrintJob> getCustomerJobHistory(User customer) {
         return printJobRepository.findByCustomerOrderByCreatedAtDesc(customer);
     }
-    
+
     public List<PrintJob> getVendorJobQueue(Vendor vendor) {
         return printJobRepository.findPendingJobsByVendor(vendor);
     }
-    
-    /**
-     * Get streaming URL for vendor printing
-     */
+
     public String getJobFileStreamingUrl(Long jobId, Vendor vendor) {
         PrintJob job = getJobForVendor(jobId, vendor);
         return fileStorageService.getStreamingUrlForPrinting(job.getS3ObjectKey());
     }
-    
-    // ===== HELPER METHODS =====
-    
-    /**
-     * Get job and verify vendor ownership
-     */
+
     private PrintJob getJobForVendor(Long jobId, Vendor vendor) {
-        Optional<PrintJob> jobOpt = printJobRepository.findById(jobId);
-        if (jobOpt.isEmpty()) {
-            throw new RuntimeException("Print job not found: " + jobId);
-        }
-        
-        PrintJob job = jobOpt.get();
-        
-        if (!job.getVendor().getId().equals(vendor.getId())) {
-            throw new RuntimeException("Job belongs to a different vendor");
-        }
-        
+        PrintJob job = printJobRepository.findById(jobId).orElseThrow(() -> new RuntimeException("Print job not found: " + jobId));
+        if (!job.getVendor().getId().equals(vendor.getId())) throw new RuntimeException("Job belongs to a different vendor");
         return job;
     }
-    
-    /**
-     * Validate job creation request
-     */
-    private void validateJobRequest(MultipartFile file, PaperSize paperSize, int copies,
-                                  Double customerLatitude, Double customerLongitude) {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("File is required");
-        }
-        
-        if (file.getSize() > 50 * 1024 * 1024) { // 50MB limit
-            throw new IllegalArgumentException("File size too large (max 50MB)");
-        }
-        
-        if (paperSize == null) {
-            throw new IllegalArgumentException("Paper size is required");
-        }
-        
-        if (copies < 1 || copies > 100) {
-            throw new IllegalArgumentException("Copies must be between 1 and 100");
-        }
-        
-        if (customerLatitude == null || customerLongitude == null) {
-            throw new IllegalArgumentException("Customer location is required for vendor matching");
-        }
-        
-        if (customerLatitude < -90 || customerLatitude > 90 ||
-            customerLongitude < -180 || customerLongitude > 180) {
-            throw new IllegalArgumentException("Invalid GPS coordinates");
-        }
+
+    private void validateJobRequest(MultipartFile file, PaperSize paperSize, int copies, Double customerLatitude, Double customerLongitude) {
+        if (file == null || file.isEmpty() || file.getSize() > 50 * 1024 * 1024) throw new IllegalArgumentException("Invalid file");
+        if (paperSize == null || copies < 1 || copies > 100) throw new IllegalArgumentException("Invalid print settings");
+        if (customerLatitude == null || customerLongitude == null || customerLatitude < -90 || customerLatitude > 90 || customerLongitude < -180 || customerLongitude > 180) throw new IllegalArgumentException("Invalid location");
     }
-    
-    /**
-     * Generate unique tracking code
-     */
+
     private String generateUniqueTrackingCode() {
         String trackingCode;
         do {
             trackingCode = "PJ" + String.format("%06d", random.nextInt(1000000));
         } while (printJobRepository.existsByTrackingCode(trackingCode));
-        
         return trackingCode;
     }
-    
-    /**
-     * Get vendor's price per page
-     */
+
     private BigDecimal getVendorPricePerPage(Vendor vendor, boolean isColor, boolean isDoubleSided) {
-        if (isColor && isDoubleSided) {
-            return vendor.getPricePerPageColorDoubleSided();
-        } else if (isColor && !isDoubleSided) {
-            return vendor.getPricePerPageColorSingleSided();
-        } else if (!isColor && isDoubleSided) {
-            return vendor.getPricePerPageBWDoubleSided();
-        } else {
-            return vendor.getPricePerPageBWSingleSided();
-        }
+        if (isColor) return isDoubleSided ? vendor.getPricePerPageColorDoubleSided() : vendor.getPricePerPageColorSingleSided();
+        else return isDoubleSided ? vendor.getPricePerPageBWDoubleSided() : vendor.getPricePerPageBWSingleSided();
     }
-    
-    /**
-     * Calculate total job price
-     */
+
     private BigDecimal calculateTotalPrice(BigDecimal pricePerPage, int totalPages, int copies) {
-        return pricePerPage
-                .multiply(new BigDecimal(totalPages))
-                .multiply(new BigDecimal(copies))
-                .setScale(2, RoundingMode.HALF_UP);
+        return pricePerPage.multiply(new BigDecimal(totalPages)).multiply(new BigDecimal(copies)).setScale(2, RoundingMode.HALF_UP);
     }
-    
-    // ===== VENDOR MATCH RESULT CLASS =====
-    
-    /**
-     * Result of vendor matching algorithm
-     */
+
     private static class VendorMatch {
         private final Vendor vendor;
         private final double distance;
         private final BigDecimal pricePerPage;
         private final BigDecimal totalPrice;
         private final double matchScore;
-        
-        public VendorMatch(Vendor vendor, double distance, BigDecimal pricePerPage, 
-                          BigDecimal totalPrice, double matchScore) {
+
+        public VendorMatch(Vendor vendor, double distance, BigDecimal pricePerPage, BigDecimal totalPrice, double matchScore) {
             this.vendor = vendor;
             this.distance = distance;
             this.pricePerPage = pricePerPage;
             this.totalPrice = totalPrice;
             this.matchScore = matchScore;
         }
-        
-        // Getters
+
         public Vendor getVendor() { return vendor; }
         public double getDistance() { return distance; }
         public BigDecimal getPricePerPage() { return pricePerPage; }

@@ -1,5 +1,6 @@
 package com.printwave.core.service;
 
+import com.printwave.core.entity.PrintJob;
 import com.printwave.core.entity.User;
 import com.printwave.core.entity.Vendor;
 import org.springframework.mail.SimpleMailMessage;
@@ -18,12 +19,12 @@ public class EmailService {
     public void sendVerificationEmail(User user) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(user.getEmail());
-        message.setSubject("PrintWave - Email Verification");
+        message.setSubject("Spoolr - Email Verification");
         message.setText("Hello " + user.getName() + ",\n\n" +
-                       "Welcome to PrintWave! Please click the link below to verify your email:\n\n" +
+                       "Welcome to Spoolr! Please click the link below to verify your email:\n\n" +
                        "http://localhost:8080/api/users/verify?token=" + user.getVerificationToken() + "\n\n" +
                        "If you didn't create an account, please ignore this email.\n\n" +
-                       "Thank you,\nPrintWave Team");
+                       "Thank you,\nSpoolr Team");
         
         mailSender.send(message);
     }
@@ -32,13 +33,13 @@ public class EmailService {
     public void sendPasswordResetEmail(User user) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(user.getEmail());
-        message.setSubject("PrintWave - Password Reset Request");
+        message.setSubject("Spoolr - Password Reset Request");
         message.setText("Hello " + user.getName() + ",\n\n" +
                        "You requested a password reset. Please click the link below to reset your password:\n\n" +
                        "http://localhost:8080/api/users/reset-password?token=" + user.getPasswordResetToken() + "\n\n" +
                        "This link will expire in 15 minutes.\n" +
                        "If you didn't request this, please ignore this email.\n\n" +
-                       "Thank you,\nPrintWave Team");
+                       "Thank you,\nSpoolr Team");
         
         mailSender.send(message);
     }
@@ -49,14 +50,14 @@ public class EmailService {
     public void sendVendorVerificationEmail(Vendor vendor) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(vendor.getEmail());
-        message.setSubject("PrintWave - Vendor Email Verification");
+        message.setSubject("Spoolr - Vendor Email Verification");
         message.setText("Hello " + vendor.getContactPersonName() + ",\n\n" +
-                       "Welcome to PrintWave! Thank you for registering " + vendor.getBusinessName() + ".\n\n" +
+                       "Welcome to Spoolr! Thank you for registering " + vendor.getBusinessName() + ".\n\n" +
                        "Please click the link below to verify your email address:\n\n" +
                        "http://localhost:8080/api/vendors/verify-email?token=" + vendor.getVerificationToken() + "\n\n" +
                        "After verification, you'll receive your Station App activation key.\n\n" +
                        "If you didn't register this business, please ignore this email.\n\n" +
-                       "Thank you,\nPrintWave Team");
+                       "Thank you,\nSpoolr Team");
         
         mailSender.send(message);
     }
@@ -65,7 +66,7 @@ public class EmailService {
     public void sendVendorActivationEmail(Vendor vendor) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(vendor.getEmail());
-        message.setSubject("PrintWave - Station App Activation Key");
+        message.setSubject("Spoolr - Station App Activation Key");
         message.setText("Hello " + vendor.getContactPersonName() + ",\n\n" +
                        "Congratulations! Your email has been verified for " + vendor.getBusinessName() + ".\n\n" +
                        "Here are your Station App details:\n\n" +
@@ -73,14 +74,171 @@ public class EmailService {
                        "🏪 Store Code: " + vendor.getStoreCode() + "\n" +
                        "🌐 QR Code URL: " + vendor.getQrCodeUrl() + "\n\n" +
                        "Next Steps:\n" +
-                       "1. Download the PrintWave Station App\n" +
+                       "1. Download the Spoolr Station App\n" +
                        "2. Log in using your activation key\n" +
                        "3. Connect your printers for auto-discovery\n" +
                        "4. Open your store to start receiving orders\n\n" +
                        "Your customers can now scan the QR code at your location to place orders!\n\n" +
-                       "Thank you for joining PrintWave!\n\n" +
-                       "PrintWave Team");
+                       "Thank you for joining Spoolr!\n\n" +
+                       "Spoolr Team");
         
         mailSender.send(message);
+    }
+    
+    // ===== JOB STATUS EMAIL NOTIFICATIONS =====
+    
+    /**
+     * Send email notification when job is accepted by vendor
+     */
+    @Async
+    public void sendJobAcceptedEmail(PrintJob job) {
+        // Only send email to registered customers (not anonymous)
+        if (job.getCustomer() != null && job.getCustomer().getEmail() != null) {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(job.getCustomer().getEmail());
+            message.setSubject("Spoolr - Your Print Job Has Been Accepted! 🎉");
+            message.setText("Hello " + job.getCustomer().getName() + ",\n\n" +
+                           "Great news! Your print job has been accepted by a vendor.\n\n" +
+                           "📄 Job Details:\n" +
+                           "• File: " + job.getOriginalFileName() + "\n" +
+                           "• Tracking Code: " + job.getTrackingCode() + "\n" +
+                           "• Print Specs: " + job.getPrintSpecsSummary() + "\n" +
+                           "• Total Price: ₹" + job.getTotalPrice() + "\n\n" +
+                           "🏪 Vendor Details:\n" +
+                           "• Business: " + job.getVendor().getBusinessName() + "\n" +
+                           "• Address: " + job.getVendor().getBusinessAddress() + "\n" +
+                           "• Contact: " + job.getVendor().getPhoneNumber() + "\n\n" +
+                           "Your document will begin printing shortly. You'll receive another email when it's ready for pickup.\n\n" +
+                           "Track your job: http://localhost:8080/api/jobs/status/" + job.getTrackingCode() + "\n\n" +
+                           "Thank you for using Spoolr!\n\n" +
+                           "Spoolr Team");
+            
+            mailSender.send(message);
+        }
+    }
+    
+    /**
+     * Send email notification when job starts printing
+     */
+    @Async
+    public void sendJobPrintingEmail(PrintJob job, int estimatedMinutes) {
+        // Only send email to registered customers (not anonymous)
+        if (job.getCustomer() != null && job.getCustomer().getEmail() != null) {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(job.getCustomer().getEmail());
+            message.setSubject("Spoolr - Your Document Is Being Printed! 🖨️");
+            message.setText("Hello " + job.getCustomer().getName() + ",\n\n" +
+                           "Your document is now being printed!\n\n" +
+                           "📄 Job Details:\n" +
+                           "• File: " + job.getOriginalFileName() + "\n" +
+                           "• Tracking Code: " + job.getTrackingCode() + "\n" +
+                           "• Print Specs: " + job.getPrintSpecsSummary() + "\n\n" +
+                           "⏰ Estimated Completion: " + estimatedMinutes + " minutes\n" +
+                           "🏪 Pickup Location: " + job.getVendor().getBusinessName() + "\n" +
+                           "📍 Address: " + job.getVendor().getBusinessAddress() + "\n\n" +
+                           "You'll receive an email notification as soon as your document is ready for pickup.\n\n" +
+                           "Track your job: http://localhost:8080/api/jobs/status/" + job.getTrackingCode() + "\n\n" +
+                           "Thank you for using Spoolr!\n\n" +
+                           "Spoolr Team");
+            
+            mailSender.send(message);
+        }
+    }
+    
+    /**
+     * Send email notification when job is ready for pickup - THE MOST IMPORTANT ONE!
+     */
+    @Async
+    public void sendJobReadyForPickupEmail(PrintJob job) {
+        // Send to both registered customers AND anonymous customers if we have their email
+        String customerEmail = null;
+        String customerName = "Customer";
+        
+        if (job.getCustomer() != null && job.getCustomer().getEmail() != null) {
+            // Registered customer
+            customerEmail = job.getCustomer().getEmail();
+            customerName = job.getCustomer().getName();
+        }
+        // Note: For anonymous customers, we don't have email, so only WebSocket notification
+        
+        if (customerEmail != null) {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(customerEmail);
+            message.setSubject("Spoolr - Your Print Job Is Ready for Pickup! ✅");
+            message.setText("Hello " + customerName + ",\n\n" +
+                           "🎉 GREAT NEWS! Your print job is ready for pickup!\n\n" +
+                           "📄 Job Details:\n" +
+                           "• File: " + job.getOriginalFileName() + "\n" +
+                           "• Tracking Code: " + job.getTrackingCode() + "\n" +
+                           "• Print Specs: " + job.getPrintSpecsSummary() + "\n" +
+                           "• Total Price: ₹" + job.getTotalPrice() + "\n\n" +
+                           "📍 PICKUP LOCATION:\n" +
+                           "• Business: " + job.getVendor().getBusinessName() + "\n" +
+                           "• Address: " + job.getVendor().getBusinessAddress() + "\n" +
+                           "• Contact: " + job.getVendor().getPhoneNumber() + "\n\n" +
+                           "⏰ Please pickup during business hours.\n" +
+                           "💳 Payment: " + (job.isAnonymous() ? "Pay at the store" : "Already processed online") + "\n\n" +
+                           "Show this tracking code when you arrive: " + job.getTrackingCode() + "\n\n" +
+                           "Track your job: http://localhost:8080/api/jobs/status/" + job.getTrackingCode() + "\n\n" +
+                           "Thank you for using Spoolr!\n\n" +
+                           "Spoolr Team");
+            
+            mailSender.send(message);
+        }
+    }
+    
+    /**
+     * Send email notification when job is completed
+     */
+    @Async
+    public void sendJobCompletedEmail(PrintJob job) {
+        // Only send email to registered customers (not anonymous)
+        if (job.getCustomer() != null && job.getCustomer().getEmail() != null) {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(job.getCustomer().getEmail());
+            message.setSubject("Spoolr - Print Job Completed! Thank You! 🙏");
+            message.setText("Hello " + job.getCustomer().getName() + ",\n\n" +
+                           "Your print job has been completed successfully!\n\n" +
+                           "📄 Job Details:\n" +
+                           "• File: " + job.getOriginalFileName() + "\n" +
+                           "• Tracking Code: " + job.getTrackingCode() + "\n" +
+                           "• Print Specs: " + job.getPrintSpecsSummary() + "\n" +
+                           "• Total Price: ₹" + job.getTotalPrice() + "\n\n" +
+                           "Thank you for choosing Spoolr! We hope you're satisfied with our service.\n\n" +
+                           "📝 We'd love your feedback! Please rate your experience:\n" +
+                           "http://localhost:8080/feedback?job=" + job.getTrackingCode() + "\n\n" +
+                           "Need another print job? Visit our website or find the nearest Spoolr partner.\n\n" +
+                           "Best regards,\n" +
+                           "Spoolr Team");
+            
+            mailSender.send(message);
+        }
+    }
+    
+    /**
+     * Send email notification if job is rejected or cancelled
+     */
+    @Async
+    public void sendJobIssueEmail(PrintJob job, String issue, String message) {
+        // Only send email to registered customers (not anonymous)
+        if (job.getCustomer() != null && job.getCustomer().getEmail() != null) {
+            SimpleMailMessage emailMessage = new SimpleMailMessage();
+            emailMessage.setTo(job.getCustomer().getEmail());
+            emailMessage.setSubject("Spoolr - Update on Your Print Job 📋");
+            emailMessage.setText("Hello " + job.getCustomer().getName() + ",\n\n" +
+                               "We have an update regarding your print job:\n\n" +
+                               "📄 Job Details:\n" +
+                               "• File: " + job.getOriginalFileName() + "\n" +
+                               "• Tracking Code: " + job.getTrackingCode() + "\n" +
+                               "• Status: " + issue + "\n\n" +
+                               "ℹ️ Details: " + message + "\n\n" +
+                               "We're working to resolve this and will update you shortly.\n" +
+                               "If you have any questions, please contact us.\n\n" +
+                               "Track your job: http://localhost:8080/api/jobs/status/" + job.getTrackingCode() + "\n\n" +
+                               "Thank you for your patience.\n\n" +
+                               "Spoolr Team");
+            
+            mailSender.send(emailMessage);
+        }
     }
 }

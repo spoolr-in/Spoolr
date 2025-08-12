@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Collections;
 
 /**
  * PrintJobController - Complete "Uber for Printing" REST APIs
@@ -94,6 +95,7 @@ public class PrintJobController {
             @RequestParam("copies") int copies,
             @RequestParam("customerLatitude") double customerLatitude,
             @RequestParam("customerLongitude") double customerLongitude,
+            @RequestParam(value = "vendorId", required = false) Long vendorId, // New optional parameter
             HttpServletRequest request) {
         
         try {
@@ -103,7 +105,7 @@ public class PrintJobController {
             // Create print job (same logic as anonymous, but with customer)
             PrintJob printJob = createPrintJob(
                 file, customer, paperSizeStr, isColor, isDoubleSided, copies,
-                customerLatitude, customerLongitude
+                customerLatitude, customerLongitude, vendorId
             );
             
             return ResponseEntity.ok(Map.of(
@@ -261,12 +263,13 @@ public class PrintJobController {
             // Create anonymous print job (customer = null, use vendor location)
             PrintJob printJob = createPrintJob(
                 file, null, paperSizeStr, isColor, isDoubleSided, copies,
-                vendor.getLatitude(), vendor.getLongitude()
+                vendor.getLatitude(), vendor.getLongitude(), null // No manual vendor selection for QR
             );
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Print job created successfully! Please wait while we print your document.");
+            response.put("jobId", printJob.getId()); // Add jobId for frontend operations
             response.put("trackingCode", printJob.getTrackingCode());
             response.put("status", printJob.getStatus().name());
             response.put("totalPages", printJob.getTotalPages());
@@ -293,6 +296,45 @@ public class PrintJobController {
                 "success", false,
                 "error", "Failed to create print job: " + e.getMessage()
             ));
+        }
+    }
+
+    /**
+     * 💰 Get a quote for a print job from multiple vendors.
+     * This allows the user to see a list of vendors and prices before committing.
+     */
+    @PostMapping("/jobs/quote")
+    public ResponseEntity<?> getJobQuote(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("paperSize") String paperSizeStr,
+            @RequestParam("isColor") boolean isColor,
+            @RequestParam("isDoubleSided") boolean isDoubleSided,
+            @RequestParam("copies") int copies,
+            @RequestParam("customerLatitude") double customerLatitude,
+            @RequestParam("customerLongitude") double customerLongitude) {
+        try {
+            List<Map<String, Object>> quotes = printJobService.getQuoteForJob(
+                file, paperSizeStr, isColor, isDoubleSided, copies, customerLatitude, customerLongitude
+            );
+
+            if (quotes.isEmpty()) {
+                return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "No vendors are currently available for this job.",
+                    "vendors", Collections.emptyList()
+                ));
+            }
+
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "vendors", quotes
+            ));
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("success", false, "error", "An unexpected error occurred while generating quotes."));
         }
     }
 
@@ -393,6 +435,32 @@ public class PrintJobController {
                 "jobId", updatedJob.getId(),
                 "status", updatedJob.getStatus().name(),
                 "trackingCode", updatedJob.getTrackingCode()
+            ));
+            
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * ❌ Reject a print job (Station App)
+     */
+    @PostMapping("/jobs/{jobId}/reject")
+    @PreAuthorize("hasRole('VENDOR')")
+    public ResponseEntity<?> rejectJob(@PathVariable Long jobId, 
+                                     HttpServletRequest request) {
+        try {
+            Vendor vendor = getAuthenticatedVendor(request);
+            PrintJob updatedJob = printJobService.rejectJob(jobId, vendor);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Job rejected. We will offer it to another vendor.",
+                "jobId", updatedJob.getId(),
+                "status", updatedJob.getStatus().name()
             ));
             
         } catch (RuntimeException e) {
@@ -520,7 +588,7 @@ public class PrintJobController {
      */
     private PrintJob createPrintJob(MultipartFile file, User customer, String paperSizeStr,
                                    boolean isColor, boolean isDoubleSided, int copies,
-                                   double latitude, double longitude) {
+                                   double latitude, double longitude, Long vendorId) {
         
         // Parse paper size
         PaperSize paperSize = PaperSize.fromString(paperSizeStr);
@@ -528,7 +596,7 @@ public class PrintJobController {
         // Create print job using the service
         return printJobService.createPrintJob(
             file, customer, paperSize, isColor, isDoubleSided, copies,
-            latitude, longitude
+            latitude, longitude, vendorId
         );
     }
 
@@ -545,7 +613,7 @@ public class PrintJobController {
      * Get authenticated vendor from JWT token
      */
     private Vendor getAuthenticatedVendor(HttpServletRequest request) {
-        Long vendorId = (Long) request.getAttribute("vendorId");
+        Long vendorId = (Long) request.getAttribute("userId"); // JWT filter sets userId for both customers and vendors
         return vendorRepository.findById(vendorId)
                 .orElseThrow(() -> new RuntimeException("Vendor not found"));
     }
@@ -586,7 +654,7 @@ public class PrintJobController {
         details.put("earnings", job.getTotalPrice()); // TODO: Subtract platform fee
         details.put("createdAt", job.getCreatedAt());
         details.put("isAnonymous", job.isAnonymous());
-        details.put("requiresAction", job.getStatus().name().equals("MATCHED"));
+        details.put("requiresAction", job.getStatus().name().equals("AWAITING_ACCEPTANCE"));
         details.put("paymentType", job.isAnonymous() ? "Pay at store" : "Paid online");
         return details;
     }
@@ -597,13 +665,15 @@ public class PrintJobController {
     private String getEstimatedCompletion(PrintJob job) {
         return switch (job.getStatus()) {
             case UPLOADED, PROCESSING -> "Finding nearby vendor...";
-            case MATCHED -> "Waiting for vendor to accept (5-10 minutes)";
+            case AWAITING_ACCEPTANCE -> "Waiting for vendor to accept (under 90 seconds)";
             case ACCEPTED -> "Vendor preparing to print (2-5 minutes)";
             case PRINTING -> "Currently printing (2-5 minutes)";
             case READY -> "Ready for pickup at store!";
             case COMPLETED -> "Completed";
-            case CANCELLED -> "Cancelled";
-            case REJECTED -> "No vendors available";
+            case CANCELLED -> "Cancelled by user";
+            case VENDOR_REJECTED -> "Vendor rejected the offer, searching for a new one...";
+            case VENDOR_TIMEOUT -> "Vendor did not respond, searching for a new one...";
+            case NO_VENDORS_AVAILABLE -> "Could not find any available vendors for your job.";
         };
     }
 }

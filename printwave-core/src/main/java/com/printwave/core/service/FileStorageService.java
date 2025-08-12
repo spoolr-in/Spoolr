@@ -50,10 +50,10 @@ public class FileStorageService {
      * Customer uploads document → Stored securely in cloud
      * 
      * @param file The file uploaded by customer (PDF, image, etc.)
-     * @param jobId The print job ID (for unique naming)
+     * @param fileIdentifier A unique string (e.g., UUID) for file naming
      * @return FileUploadResult containing storage information
      */
-    public FileUploadResult uploadFile(MultipartFile file, Long jobId) {
+    public FileUploadResult uploadFile(MultipartFile file, String fileIdentifier) {
         try {
             // Ensure bucket exists (create if it doesn't)
             createBucketIfNotExists();
@@ -61,7 +61,7 @@ public class FileStorageService {
             // Generate unique file name and organized path
             String originalFileName = file.getOriginalFilename();
             FileType fileType = FileType.fromFileName(originalFileName);
-            String uniqueFileName = generateUniqueFileName(originalFileName, jobId);
+            String uniqueFileName = generateUniqueFileName(originalFileName, fileIdentifier);
             String objectKey = generateObjectKey(uniqueFileName);
             
             // Upload file to MinIO with proper content type
@@ -238,13 +238,13 @@ public class FileStorageService {
     
     /**
      * Generate unique file name to avoid conflicts
-     * Format: job_123_resume.pdf
+     * Format: job_UUID_resume.pdf
      * 
      * @param originalFileName Original file name from customer
-     * @param jobId Print job ID (ensures uniqueness)
+     * @param fileIdentifier A unique string (e.g., UUID) for file naming
      * @return Unique file name safe for storage
      */
-    private String generateUniqueFileName(String originalFileName, Long jobId) {
+    private String generateUniqueFileName(String originalFileName, String fileIdentifier) {
         // Extract file extension safely
         String extension = "";
         int dotIndex = originalFileName.lastIndexOf('.');
@@ -257,8 +257,8 @@ public class FileStorageService {
         baseName = baseName.replaceAll("[^a-zA-Z0-9_-]", "_"); // Replace special chars with underscore
         baseName = baseName.substring(0, Math.min(baseName.length(), 50)); // Limit length
         
-        // Create unique name: job_123_resume.pdf
-        return String.format("job_%d_%s%s", jobId, baseName, extension);
+        // Create unique name: job_UUID_resume.pdf
+        return String.format("job_%s_%s%s", fileIdentifier, baseName, extension);
     }
     
     /**
@@ -292,6 +292,10 @@ public class FileStorageService {
         }
         
         return contentType;
+    }
+
+    public FileType detectFileType(MultipartFile file) {
+        return FileType.fromFileName(file.getOriginalFilename());
     }
     
     // ===== RESULT CLASSES =====

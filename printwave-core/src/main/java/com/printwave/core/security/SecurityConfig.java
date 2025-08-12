@@ -56,9 +56,16 @@ public class SecurityConfig {
                 .requestMatchers("/api/vendors/update-capabilities").authenticated()
                 .requestMatchers("/api/vendors/change-password").authenticated()
                 
+                // Public print job endpoints (no authentication required)
+                .requestMatchers("/api/store/**").permitAll() // QR code landing pages
+                .requestMatchers("/api/jobs/qr-anonymous-upload").permitAll() // Anonymous upload
+                .requestMatchers("/api/jobs/status/**").permitAll() // Public job tracking
+                .requestMatchers("/api/jobs/quote").permitAll() // Public quote endpoint
+                
                 // Protected user endpoints (authentication required)
                 .requestMatchers("/api/users/profile").authenticated()
                 .requestMatchers("/api/users/dashboard").authenticated()
+                .requestMatchers("/api/jobs/**").authenticated() // All other job endpoints require auth
                 
                 // Any other request requires authentication
                 .anyRequest().authenticated()

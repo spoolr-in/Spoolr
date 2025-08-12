@@ -17,13 +17,15 @@ package com.printwave.core.enums;
 public enum JobStatus {
     UPLOADED("Document uploaded, waiting for processing"),
     PROCESSING("Analyzing document and finding vendors"),
-    MATCHED("Assigned to vendor, waiting for acceptance"),
-    ACCEPTED("Vendor accepted, preparing to print"),
-    PRINTING("Document is being printed"),
-    READY("Document ready for customer pickup"),
-    COMPLETED("Job completed successfully"),
-    CANCELLED("Job cancelled by customer"),
-    REJECTED("Job rejected by vendor");
+    AWAITING_ACCEPTANCE("Offered to a vendor, awaiting their response"),
+    ACCEPTED("Vendor has accepted the job and is preparing to print"),
+    PRINTING("The document is currently being printed"),
+    READY("Your document is printed and ready for pickup"),
+    COMPLETED("The job has been successfully completed"),
+    CANCELLED("The job was cancelled by the customer"),
+    VENDOR_REJECTED("The vendor actively rejected the job offer"),
+    VENDOR_TIMEOUT("The vendor did not respond to the job offer in time"),
+    NO_VENDORS_AVAILABLE("No suitable vendors were found for this job");
     
     private final String description;
     
@@ -39,11 +41,11 @@ public enum JobStatus {
     
     // Helper methods for business logic
     public boolean isActive() {
-        return this != COMPLETED && this != CANCELLED && this != REJECTED;
+        return this != COMPLETED && this != CANCELLED && this != VENDOR_REJECTED && this != NO_VENDORS_AVAILABLE;
     }
     
     public boolean canBeCancelled() {
-        return this == UPLOADED || this == PROCESSING || this == MATCHED;
+        return this == UPLOADED || this == PROCESSING || this == AWAITING_ACCEPTANCE;
     }
     
     public boolean requiresCustomerAction() {

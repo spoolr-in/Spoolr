@@ -43,6 +43,9 @@ public class VendorLoginResponse {
     
     // Password status
     private Boolean passwordSet;
+
+    // JWT Token
+    private String token;
     
     // Constructor for successful login
     public VendorLoginResponse(String message) {
