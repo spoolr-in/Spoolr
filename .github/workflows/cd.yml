@@ -2,7 +2,7 @@ name: Spoolr Deployment
 
 on:
   workflow_run:
-    workflows: ["Spoolr CI Pipeline"]
+    workflows: ["CI workflow"]
     branches: [main]
     types:
       - completed
