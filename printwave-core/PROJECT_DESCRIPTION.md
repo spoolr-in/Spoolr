@@ -1,8 +1,49 @@
 # PrintWave - Technical Documentation & Developer Guide
 
+## 🚨 **IMPORTANT: REBRANDING NOTICE**
+
+### **PrintWave → Spoolr Transition**
+
+**⚠️ For Portal App and Station App Developers:**
+
+The platform is currently undergoing a **rebranding from PrintWave to Spoolr**. Please note:
+
+#### **✅ What You Should Use:**
+- **User-Facing Brand Name**: **"Spoolr"** (in all UI, emails, marketing materials)
+- **Product Tagline**: "Spoolr - Print Anywhere, Anytime" 
+- **Email Templates**: Use "Spoolr" as the sender/brand name
+- **App Names**: "Spoolr Portal" and "Spoolr Station"
+
+#### **⚠️ What to Keep Unchanged:**
+- **API Endpoints**: All URLs remain the same (`/api/...`)
+- **Database Names**: Keep existing database and table names
+- **Infrastructure**: Docker containers, services, and internal naming stay "printwave"
+- **Environment Variables**: Keep existing `PRINTWAVE_*` variables
+- **Repository Names**: Keep existing git repository names
+
+#### **🎯 Implementation Guidelines:**
+```javascript
+// ✅ Correct - User-facing branding
+const APP_NAME = "Spoolr";
+const TAGLINE = "Print Anywhere, Anytime";
+document.title = "Spoolr - Print Jobs";
+
+// ✅ Correct - Keep technical references
+fetch('http://localhost:8080/api/jobs/upload') // Don't change
+const DATABASE_URL = process.env.PRINTWAVE_DB_URL; // Don't change
+```
+
+#### **📧 Email Branding Update:**
+- **From Name**: "Spoolr" (not "PrintWave")
+- **Subject Lines**: "Your Spoolr Print Job..."
+- **Email Signatures**: "The Spoolr Team"
+- **Footer**: "Spoolr - Print Anywhere, Anytime"
+
+---
+
 ## Overview
 
-PrintWave is a comprehensive printing service platform that connects customers with local print vendors, creating an "Uber for Printing" solution. The platform consists of three main components:
+Spoolr (formerly PrintWave) is a comprehensive printing service platform that connects customers with local print vendors, creating an "Uber for Printing" solution. The platform consists of three main components:
 
 1. **Core API** (Backend): Spring Boot Java application with RESTful APIs and WebSocket support
 2. **Portal App** (Customer Frontend): Web application for customers to upload and track print jobs
@@ -1505,6 +1546,7 @@ EMAIL_PASSWORD: hspywwztopifrwpv
 - ✅ Professional email templates with job details, vendor info, and tracking links
 
 **Testing:** ✅ Verified end-to-end email delivery for all job status transitions
+**Recent Fix:** ✅ Fixed "Ready for Pickup" email notification bug - emails now properly sent when jobs become ready
 
 ---
 

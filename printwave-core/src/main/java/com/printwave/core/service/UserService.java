@@ -3,6 +3,7 @@ package com.printwave.core.service;
 import com.printwave.core.entity.User;
 import com.printwave.core.enums.UserRole;
 import com.printwave.core.repository.UserRepository;
+import com.printwave.core.repository.PrintJobRepository;
 import com.printwave.core.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -17,6 +18,9 @@ public class UserService {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private PrintJobRepository printJobRepository;
     
     @Autowired
     private EmailService emailService;
@@ -120,5 +124,22 @@ public class UserService {
     public User getByEmail(String email) {
         return userRepository.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found with email: " + email));
+    }
+    
+    /**
+     * ✅ IMPLEMENTED: Get total number of orders placed by user
+     * This calculates the complete order history count for dashboard display
+     */
+    public Integer getUserTotalOrders(Long userId) {
+        try {
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            long orderCount = printJobRepository.countByCustomer(user);
+            return Math.toIntExact(orderCount);
+        } catch (Exception e) {
+            // Return 0 if there's any error counting orders
+            return 0;
+        }
     }
 }

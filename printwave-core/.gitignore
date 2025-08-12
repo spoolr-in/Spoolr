@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Environment Variables ###
+# Exclude sensitive environment files
+.env

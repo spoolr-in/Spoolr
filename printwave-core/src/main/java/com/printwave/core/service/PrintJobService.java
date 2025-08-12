@@ -7,6 +7,7 @@ import com.printwave.core.enums.FileType;
 import com.printwave.core.enums.JobStatus;
 import com.printwave.core.enums.PaperSize;
 import com.printwave.core.repository.PrintJobRepository;
+import com.printwave.core.repository.UserRepository;
 import com.printwave.core.repository.VendorRepository;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -29,17 +30,22 @@ import java.util.stream.Collectors;
 
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 @Transactional
 public class PrintJobService {
 
     private final PrintJobRepository printJobRepository;
+    private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
     private final FileStorageService fileStorageService;
     private final NotificationService notificationService;
+    private final EmailService emailService;
     private final TaskScheduler taskScheduler;
     private final Random random = new Random();
+    private static final Logger log = LoggerFactory.getLogger(PrintJobService.class);
 
     // A thread-safe map to keep track of the scheduled timeout tasks for each job.
     // This allows us to cancel the timeout task if a vendor accepts or rejects the job.
@@ -47,14 +53,18 @@ public class PrintJobService {
 
     @Autowired
     public PrintJobService(PrintJobRepository printJobRepository,
+                          UserRepository userRepository,
                           VendorRepository vendorRepository,
                           FileStorageService fileStorageService,
                           NotificationService notificationService,
+                          EmailService emailService,
                           TaskScheduler taskScheduler) {
         this.printJobRepository = printJobRepository;
+        this.userRepository = userRepository;
         this.vendorRepository = vendorRepository;
         this.fileStorageService = fileStorageService;
         this.notificationService = notificationService;
+        this.emailService = emailService;
         this.taskScheduler = taskScheduler;
     }
 
@@ -264,39 +274,39 @@ public class PrintJobService {
                     return 1;
             }
         } catch (Exception e) {
-            System.err.println("Page counting failed for file: " + file.getOriginalFilename() + " - " + e.getMessage());
+            log.warn("Page counting failed for file: {} - {}", file.getOriginalFilename(), e.getMessage());
             return 1;
         }
     }
 
     private List<Vendor> getEligibleVendors(PaperSize paperSize, boolean isColor) {
-        System.out.println("\n--- DEBUG: Entering getEligibleVendors ---");
+        log.debug("Finding eligible vendors for job - paperSize: {}, isColor: {}", paperSize, isColor);
         List<Vendor> allVendors = vendorRepository.findAll();
-        System.out.println("Step 1: Found " + allVendors.size() + " total vendors in DB.");
+        log.debug("Found {} total vendors in database", allVendors.size());
 
         List<Vendor> activeVendors = allVendors.stream()
                 .filter(v -> {
                     boolean isEligible = Boolean.TRUE.equals(v.getEmailVerified()) && Boolean.TRUE.equals(v.getIsStoreOpen()) && Boolean.TRUE.equals(v.getIsActive());
                     if (!isEligible) {
-                        System.out.println("  - Filtering out Vendor ID: " + v.getId() + " (is_active:" + v.getIsActive() + ", is_store_open:" + v.getIsStoreOpen() + ", email_verified:" + v.getEmailVerified() + ")");
+                        log.debug("Filtering out Vendor ID: {} - active: {}, store_open: {}, email_verified: {}", 
+                            v.getId(), v.getIsActive(), v.getIsStoreOpen(), v.getEmailVerified());
                     }
                     return isEligible;
                 })
                 .collect(Collectors.toList());
-        System.out.println("Step 2: Found " + activeVendors.size() + " vendors after checking active/open/verified status.");
+        log.debug("Found {} active vendors after status filtering", activeVendors.size());
 
         List<Vendor> capableVendors = activeVendors.stream()
                 .filter(v -> supportsJobRequirements(v, paperSize, isColor))
                 .collect(Collectors.toList());
-        System.out.println("Step 3: Found " + capableVendors.size() + " vendors after checking job requirements.");
-        System.out.println("--- DEBUG: Exiting getEligibleVendors ---\n");
+        log.debug("Found {} eligible vendors after capability filtering", capableVendors.size());
         return capableVendors;
     }
 
     private boolean supportsJobRequirements(Vendor vendor, PaperSize paperSize, boolean isColor) {
         String capabilitiesJson = vendor.getPrinterCapabilities();
         if (capabilitiesJson == null || capabilitiesJson.isBlank()) {
-            System.out.println("  - Vendor ID: " + vendor.getId() + " has no capabilities set. Assuming TRUE.");
+            log.debug("Vendor ID: {} has no capabilities set. Assuming TRUE.", vendor.getId());
             return true;
         }
         // TODO: Implement full JSON parsing logic here based on the agreed-upon structure.
@@ -332,41 +342,41 @@ public class PrintJobService {
     }
 
     public List<Map<String, Object>> getQuoteForJob(MultipartFile file, String paperSizeStr, boolean isColor, boolean isDoubleSided, int copies, double customerLatitude, double customerLongitude) throws Exception {
-        System.out.println("\n--- DEBUG: Entering getQuoteForJob ---");
-        System.out.println("  - Job Params: paperSize=" + paperSizeStr + ", isColor=" + isColor + ", copies=" + copies);
+        log.debug("Entering getQuoteForJob");
+        log.debug("Job Params: paperSize={}, isColor={}, copies={}", paperSizeStr, isColor, copies);
 
         PaperSize paperSize = PaperSize.fromString(paperSizeStr);
         validateJobRequest(file, paperSize, copies, customerLatitude, customerLongitude);
 
         FileType fileType = fileStorageService.detectFileType(file);
         int totalPages = countDocumentPages(file, fileType);
-        System.out.println("  - Detected File Type: " + fileType + ", Total Pages: " + totalPages);
+        log.debug("Detected File Type: {}, Total Pages: {}", fileType, totalPages);
 
         List<Vendor> eligibleVendors = getEligibleVendors(paperSize, isColor);
 
         if (eligibleVendors.isEmpty()) {
-            System.out.println("  - No eligible vendors found. Returning empty list.");
+            log.debug("No eligible vendors found. Returning empty list.");
             return new ArrayList<>();
         }
 
-        System.out.println("  - Mapping " + eligibleVendors.size() + " eligible vendors to quotes...");
+        log.debug("Mapping {} eligible vendors to quotes...", eligibleVendors.size());
         List<Map<String, Object>> quotes = eligibleVendors.stream()
             .map(vendor -> {
                 try {
                     double distance = calculateDistance(customerLatitude, customerLongitude, vendor.getLatitude(), vendor.getLongitude());
-                    System.out.println("    - Processing Vendor ID: " + vendor.getId() + ", Distance: " + distance);
+                    log.debug("Processing Vendor ID: {}, Distance: {}", vendor.getId(), distance);
                     if (distance > 20.0) {
-                        System.out.println("      - Vendor is too far. Skipping.");
+                        log.debug("Vendor is too far. Skipping.");
                         return null;
                     }
 
                     BigDecimal pricePerPage = getVendorPricePerPage(vendor, isColor, isDoubleSided);
                     if (pricePerPage == null) {
-                        System.out.println("      - Vendor ID: " + vendor.getId() + " has NULL price for this job type. Skipping.");
+                        log.debug("Vendor ID: {} has NULL price for this job type. Skipping.", vendor.getId());
                         return null;
                     }
                     BigDecimal totalPrice = calculateTotalPrice(pricePerPage, totalPages, copies);
-                    System.out.println("      - Vendor ID: " + vendor.getId() + ", Price: " + totalPrice);
+                    log.debug("Vendor ID: {}, Price: {}", vendor.getId(), totalPrice);
 
                     Map<String, Object> quote = new HashMap<>();
                     quote.put("vendorId", vendor.getId());
@@ -377,7 +387,7 @@ public class PrintJobService {
                     quote.put("rating", 5.0); // Placeholder
                     return quote;
                 } catch (Exception e) {
-                    System.err.println("    - ERROR processing vendor ID: " + vendor.getId() + " - " + e.getMessage());
+                    log.warn("ERROR processing vendor ID: {} - {}", vendor.getId(), e.getMessage());
                     return null;
                 }
             })
@@ -386,7 +396,7 @@ public class PrintJobService {
                               .thenComparing(q -> new BigDecimal((String) ((Map<String, Object>) q).get("price"))))
             .collect(Collectors.toList());
 
-        System.out.println("--- DEBUG: Exiting getQuoteForJob, returning " + quotes.size() + " quotes.---\n");
+        log.debug("Exiting getQuoteForJob, returning {} quotes.", quotes.size());
         return quotes;
     }
 
@@ -424,10 +434,12 @@ public class PrintJobService {
     
     /**
      * Automatically progress job from PRINTING to READY
+     * 🔧 FIXED: Properly handle Hibernate lazy loading in scheduled task context
      */
     @Transactional
     public void autoProgressToReady(Long jobId) {
         try {
+            // 🚀 USE EXPLICIT LOADING to avoid LazyInitializationException
             Optional<PrintJob> jobOpt = printJobRepository.findById(jobId);
             if (jobOpt.isPresent()) {
                 PrintJob job = jobOpt.get();
@@ -438,22 +450,55 @@ public class PrintJobService {
                     job.setReadyAt(LocalDateTime.now());
                     PrintJob savedJob = printJobRepository.save(job);
                     
-                    // 🔧 FIXED: Force loading of all related entities before async notification
-                    // This prevents Hibernate proxy issues in scheduled tasks
+                    // Create a data transfer object with all necessary information
+                    Map<String, Object> jobData = new HashMap<>();
+                    jobData.put("id", savedJob.getId());
+                    jobData.put("trackingCode", savedJob.getTrackingCode());
+                    
+                    // Explicitly fetch customer and vendor data within this transaction
                     if (savedJob.getCustomer() != null) {
-                        // Force loading customer data
-                        String customerEmail = savedJob.getCustomer().getEmail();
-                        String customerName = savedJob.getCustomer().getName();
-                    }
-                    if (savedJob.getVendor() != null) {
-                        // Force loading vendor data
-                        String vendorName = savedJob.getVendor().getBusinessName();
-                        String vendorAddress = savedJob.getVendor().getBusinessAddress();
+                        User customer = userRepository.findById(savedJob.getCustomer().getId()).orElse(null);
+                        if (customer != null) {
+                            jobData.put("customerEmail", customer.getEmail());
+                            jobData.put("customerName", customer.getName());
+                        }
                     }
                     
-                    // ✅ Enhanced notification that job is ready for pickup (WebSocket + Email!)
-                    // This is THE MOST IMPORTANT notification - customers get emails even when offline!
-                    notificationService.notifyCustomerJobReadyForPickup(savedJob);
+                    if (savedJob.getVendor() != null) {
+                        Vendor vendor = vendorRepository.findById(savedJob.getVendor().getId()).orElse(null);
+                        if (vendor != null) {
+                            jobData.put("vendorName", vendor.getBusinessName());
+                            jobData.put("vendorAddress", vendor.getBusinessAddress());
+                        }
+                    }
+                    
+                    // 🎯 Send email directly using explicit parameters to avoid Hibernate proxy issues
+                    if (jobData.containsKey("customerEmail")) {
+                        try {
+                            // Use the existing sendJobReadyForPickupEmail but with loaded data
+                            // Create a minimal email notification directly
+                            emailService.sendDirectJobReadyEmail(
+                                (String) jobData.get("customerEmail"),
+                                (String) jobData.get("customerName"),
+                                savedJob.getTrackingCode(),
+                                savedJob.getOriginalFileName(),
+                                savedJob.getPrintSpecsSummary(),
+                                savedJob.getTotalPrice().toString(),
+                                (String) jobData.get("vendorName"),
+                                (String) jobData.get("vendorAddress")
+                            );
+                            log.debug("Auto-progression email sent for job: {}", savedJob.getTrackingCode());
+                        } catch (Exception e) {
+                            log.warn("Failed to send auto-progression email for job {}: {}", savedJob.getTrackingCode(), e.getMessage());
+                        }
+                    }
+                    
+                    // Still send WebSocket notification (works with entity reference)
+                    notificationService.notifyCustomerOfStatusUpdate(
+                        savedJob.getTrackingCode(),
+                        "READY",
+                        "Great news! Your print job is ready for pickup!"
+                    );
                     
                     // Schedule auto-completion after 24 hours if not picked up
                     ScheduledFuture<?> autoCompleteTask = taskScheduler.schedule(
@@ -464,8 +509,7 @@ public class PrintJobService {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error in autoProgressToReady for job " + jobId + ": " + e.getMessage());
-            e.printStackTrace();
+            log.error("Error in autoProgressToReady for job {}: {}", jobId, e.getMessage(), e);
         } finally {
             scheduledTasks.remove(jobId);
         }
@@ -491,7 +535,7 @@ public class PrintJobService {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error in autoCompleteJob for job " + jobId + ": " + e.getMessage());
+            log.error("Error in autoCompleteJob for job {}: {}", jobId, e.getMessage());
         } finally {
             scheduledTasks.remove(jobId);
         }

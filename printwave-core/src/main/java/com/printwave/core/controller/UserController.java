@@ -211,7 +211,9 @@ public class UserController {
             // Set additional dashboard info
             response.setWelcomeMessage("Welcome back, " + user.getName() + "!");
             response.setAccountStatus(user.getEmailVerified() ? "Verified" : "Pending Verification");
-            response.setTotalOrders(0); // TODO: Calculate from orders when implemented
+            
+            // ✅ IMPLEMENTED: Calculate actual order count from PrintJob repository
+            response.setTotalOrders(userService.getUserTotalOrders(userId));
             
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {

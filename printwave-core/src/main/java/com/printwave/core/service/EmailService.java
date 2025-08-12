@@ -241,4 +241,44 @@ public class EmailService {
             mailSender.send(emailMessage);
         }
     }
+    
+    /**
+     * 🔧 FIXED: Send job ready notification with explicit parameters to avoid Hibernate issues
+     * This method is designed to work with explicit data instead of Hibernate entities in scheduled tasks
+     */
+    @Async
+    public void sendDirectJobReadyEmail(String customerEmail, String customerName, 
+                                       String trackingCode, String fileName, 
+                                       String printSpecs, String totalPrice,
+                                       String vendorName, String vendorAddress) {
+        if (customerEmail != null && !customerEmail.trim().isEmpty()) {
+            try {
+                SimpleMailMessage message = new SimpleMailMessage();
+                message.setTo(customerEmail);
+                message.setSubject("PrintWave - Your Print Job Is Ready for Pickup! ✅");
+                message.setText("Hello " + (customerName != null ? customerName : "Customer") + ",\n\n" +
+                               "🎉 GREAT NEWS! Your print job is ready for pickup!\n\n" +
+                               "📄 Job Details:\n" +
+                               "• File: " + fileName + "\n" +
+                               "• Tracking Code: " + trackingCode + "\n" +
+                               "• Print Specs: " + printSpecs + "\n" +
+                               "• Total Price: ₹" + totalPrice + "\n\n" +
+                               "📍 PICKUP LOCATION:\n" +
+                               "• Business: " + vendorName + "\n" +
+                               "• Address: " + vendorAddress + "\n\n" +
+                               "⏰ Please pickup during business hours.\n" +
+                               "💳 Payment: Already processed online\n\n" +
+                               "Show this tracking code when you arrive: " + trackingCode + "\n\n" +
+                               "Track your job: http://localhost:8080/api/jobs/status/" + trackingCode + "\n\n" +
+                               "Thank you for using PrintWave!\n\n" +
+                               "PrintWave Team");
+                
+                mailSender.send(message);
+                System.out.println("✅ Ready email sent successfully to: " + customerEmail);
+            } catch (Exception e) {
+                System.err.println("❌ Failed to send ready email to " + customerEmail + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
 }
