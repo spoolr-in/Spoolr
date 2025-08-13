@@ -1,0 +1,105 @@
+services:
+  # 🗄️ PostgreSQL Database Service
+  postgres:
+    image: postgres:15
+    container_name: spoolr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=md5"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spoolr-network
+
+  # 📁 MinIO Object Storage Service
+  minio:
+    image: minio/minio:latest
+    container_name: spoolr-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Web Console port
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - spoolr-network
+
+  # 🚀 Spoolr Core API Service (Your Spring Boot App)
+  spoolr-core:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: spoolr-core
+    restart: unless-stopped
+    environment:
+      # Database connection (using container name 'postgres' as hostname)
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      # JPA/Hibernate Configuration
+      DDL_AUTO: ${DDL_AUTO}
+      SHOW_SQL: ${SHOW_SQL}
+      
+      # Server Configuration
+      SERVER_PORT: ${SERVER_PORT}
+      
+      # Email Configuration
+      EMAIL_USERNAME: ${EMAIL_USERNAME}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET}
+      
+      # MinIO Configuration (file storage)
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
+      
+      # Spring Profile for Docker environment
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - spoolr-network
+    volumes:
+      - app_logs:/app/logs
+
+# 💾 Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  app_logs:
+    driver: local
+
+# 🌐 Custom network for service communication
+networks:
+  spoolr-network:
+    driver: bridge

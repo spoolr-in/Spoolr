@@ -21,7 +21,7 @@ jobs:
           cache: maven
           
       - name: Build with Maven
-        run: cd printwave-core && mvn clean compile -DskipTests
+        run: cd spoolr-core && mvn clean compile -DskipTests
 
   push_to_registry:
     name: Push Docker image to Docker Hub
@@ -50,7 +50,7 @@ jobs:
       - name: Build and push Spoolr Core API
         uses: docker/build-push-action@v3
         with:
-          context: ./printwave-core
-          file: ./printwave-core/Dockerfile
+          context: ./spoolr-core
+          file: ./spoolr-core/Dockerfile
           push: true
           tags: spoolr/spoolr-core:latest

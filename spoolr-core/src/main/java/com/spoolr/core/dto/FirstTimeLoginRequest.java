@@ -1,0 +1,14 @@
+package com.spoolr.core.dto;
+
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class FirstTimeLoginRequest {
+    
+    private String activationKey;
+    private String newPassword;  // Password to set for future logins
+}
