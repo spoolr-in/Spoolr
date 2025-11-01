@@ -55,9 +55,11 @@ public class WebSocketController {
                 Vendor vendor = vendorOpt.get();
                 // Update station app connection status
                 vendor.setStationAppConnected(true);
+                // Update store open/closed status based on vendor availability toggle
+                vendor.updateStoreStatus(isAvailable);
                 vendorRepository.save(vendor);
                 
-                System.out.println("Updated vendor " + vendorId + " status: connected=true");
+                System.out.println("Updated vendor " + vendorId + " status: connected=true, isStoreOpen=" + isAvailable);
             }
             
             // Store session information for this vendor

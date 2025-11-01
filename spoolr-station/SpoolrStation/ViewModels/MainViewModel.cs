@@ -24,6 +24,10 @@ namespace SpoolrStation.ViewModels;
 /// </summary>
 public class MainViewModel : BaseViewModel
 {
+    // Static instance for accessing WebSocket client from other ViewModels
+    private static MainViewModel? _instance = null;
+    public static MainViewModel? Instance => _instance;
+
     #region Private Fields
     private string _statusText = "Ready";
     private bool _isWebSocketConnected = false;
@@ -294,6 +298,11 @@ public class MainViewModel : BaseViewModel
         get => _printersViewModel;
         private set => SetProperty(ref _printersViewModel, value);
     }
+    
+    /// <summary>
+    /// WebSocket client for API calls (accessible from other ViewModels)
+    /// </summary>
+    public StompWebSocketClient? WebSocketClient => _webSocketClient;
 
     #endregion
 
@@ -327,6 +336,9 @@ public class MainViewModel : BaseViewModel
 
     public MainViewModel(AuthService? authService = null, ILoggerFactory? loggerFactory = null)
     {
+        // Set static instance for access from other ViewModels
+        _instance = this;
+        
         // Initialize services - use provided AuthService or get from ServiceProvider
         _authService = authService ?? Services.ServiceProvider.GetAuthService();
         _authStateManager = Services.ServiceProvider.GetAuthenticationStateManager();

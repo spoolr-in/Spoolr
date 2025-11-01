@@ -589,7 +589,16 @@ public class PrintJobService {
 
     public PrintJob completeJob(Long jobId, Vendor vendor) {
         PrintJob job = getJobForVendor(jobId, vendor);
-        if (job.getStatus() != JobStatus.READY) throw new RuntimeException("Job must be ready before completing");
+        // Allow completing from both PRINTING and READY status
+        if (job.getStatus() != JobStatus.READY && job.getStatus() != JobStatus.PRINTING) {
+            throw new RuntimeException("Job must be in PRINTING or READY status before completing. Current status: " + job.getStatus());
+        }
+        
+        // If coming from PRINTING, set readyAt timestamp as well
+        if (job.getStatus() == JobStatus.PRINTING && job.getReadyAt() == null) {
+            job.setReadyAt(LocalDateTime.now());
+        }
+        
         job.setStatus(JobStatus.COMPLETED);
         job.setCompletedAt(LocalDateTime.now());
         PrintJob savedJob = printJobRepository.save(job);

@@ -187,18 +187,66 @@ namespace SpoolrStation.ViewModels
                     }
                 }
                 
+                // Update job status to PRINTING in backend BEFORE printing
+                var webSocketClient = Services.ServiceProvider.GetWebSocketClient();
+                if (webSocketClient != null)
+                {
+                    var printingStatusUpdated = await webSocketClient.UpdateJobStatusToPrintingAsync(Job.JobId);
+                    if (!printingStatusUpdated)
+                    {
+                        System.Windows.MessageBox.Show(
+                            "Failed to update job status to PRINTING. Continue anyway?",
+                            "Status Update Warning",
+                            System.Windows.MessageBoxButton.OK,
+                            System.Windows.MessageBoxImage.Warning);
+                    }
+                }
+                
                 // Print the document
                 var printResult = await printService.PrintPdfAsync(DocumentSource, SelectedPrinter.PrinterName, Job.PrintSpecs);
                 
                 if (printResult.Success)
                 {
-                    System.Windows.MessageBox.Show(
-                        $"Print job sent successfully!\n\nPages printed: {printResult.PagesPrinted}\nJob ID: {printResult.PrintJobId}\n\nThe document has been sent to {SelectedPrinter.DisplayName}.",
-                        "Print Success",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Information);
+                    // Show custom completion dialog with two buttons
+                    var completionResult = System.Windows.MessageBox.Show(
+                        $"Print job sent successfully!\n\nPages printed: {printResult.PagesPrinted}\nJob ID: {printResult.PrintJobId}\n\nThe document has been sent to {SelectedPrinter.DisplayName}.\n\nHas the customer picked up the printed documents?",
+                        "Print Complete - Mark as Completed?",
+                        System.Windows.MessageBoxButton.YesNo,
+                        System.Windows.MessageBoxImage.Question);
                     
-                    // TODO: Update job status to COMPLETED in backend
+                    if (completionResult == System.Windows.MessageBoxResult.Yes)
+                    {
+                        // Customer picked up - mark as COMPLETED
+                        if (webSocketClient != null)
+                        {
+                            var completedStatusUpdated = await webSocketClient.UpdateJobStatusToCompletedAsync(Job.JobId);
+                            if (completedStatusUpdated)
+                            {
+                                System.Windows.MessageBox.Show(
+                                    "Job marked as COMPLETED! Customer has been notified.",
+                                    "Job Completed",
+                                    System.Windows.MessageBoxButton.OK,
+                                    System.Windows.MessageBoxImage.Information);
+                            }
+                            else
+                            {
+                                System.Windows.MessageBox.Show(
+                                    "Print succeeded but failed to mark as completed. Please mark it manually later.",
+                                    "Status Update Failed",
+                                    System.Windows.MessageBoxButton.OK,
+                                    System.Windows.MessageBoxImage.Warning);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Customer hasn't picked up yet - vendor will mark completed later
+                        System.Windows.MessageBox.Show(
+                            "Job printed successfully. You can mark it as completed later when the customer picks it up.",
+                            "Print Complete",
+                            System.Windows.MessageBoxButton.OK,
+                            System.Windows.MessageBoxImage.Information);
+                    }
                     
                     // Close the preview window after successful print
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>

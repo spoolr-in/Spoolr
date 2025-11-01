@@ -119,5 +119,11 @@ namespace SpoolrStation.Services
 
         public static DocumentAccessMonitoringService GetDocumentAccessMonitoringService()
             => _serviceProvider?.GetRequiredService<DocumentAccessMonitoringService>() ?? throw new InvalidOperationException("ServiceProvider not initialized");
+
+        /// <summary>
+        /// Get WebSocket client from MainViewModel instance for status updates
+        /// </summary>
+        public static StompWebSocketClient? GetWebSocketClient()
+            => ViewModels.MainViewModel.Instance?.WebSocketClient;
     }
 }

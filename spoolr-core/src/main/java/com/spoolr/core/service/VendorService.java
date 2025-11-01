@@ -26,6 +26,8 @@ public class VendorService {
     @Autowired
     private JwtUtil jwtUtil;
     
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    
     /**
      * Register a new vendor with business details
      * Step 1 of two-step registration process
@@ -310,6 +312,10 @@ public class VendorService {
         Vendor vendor = vendorRepository.findByActivationKey(activationKey)
             .orElseThrow(() -> new RuntimeException("Invalid activation key"));
         
+        if (vendor.getPasswordSet() != null && vendor.getPasswordSet()) {
+            throw new RuntimeException("Password already set. Use regular login.");
+        }
+        
         if (!vendor.getIsActive()) {
             throw new RuntimeException("Vendor account is deactivated");
         }
@@ -318,23 +324,18 @@ public class VendorService {
             throw new RuntimeException("Email not verified. Please verify your email first.");
         }
         
-        if (vendor.getPasswordSet() != null && vendor.getPasswordSet()) {
-            throw new RuntimeException("Password already set. Please use regular login.");
-        }
-        
-        if (newPassword == null || newPassword.trim().length() < 6) {
-            throw new RuntimeException("Password must be at least 6 characters long");
-        }
-        
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        vendor.setPasswordHash(encoder.encode(newPassword));
+        vendor.setPasswordHash(passwordEncoder.encode(newPassword));
         vendor.setPasswordSet(true);
-        
         vendor.setLastLoginAt(LocalDateTime.now());
         vendor.setStationAppConnected(true);
         
+        // Auto-open store on first login so vendor is immediately visible to customers
+        if (!vendor.getIsStoreOpen()) {
+            vendor.updateStoreStatus(true);
+        }
+        
         vendorRepository.save(vendor);
-
+        
         String token = jwtUtil.generateToken(vendor.getEmail(), "VENDOR", vendor.getId());
         return new VendorAuthResult(vendor, token);
     }
@@ -346,30 +347,34 @@ public class VendorService {
     @Transactional
     public VendorAuthResult loginWithStoreCodeAndPassword(String storeCode, String password) {
         Vendor vendor = vendorRepository.findByStoreCode(storeCode)
-            .orElseThrow(() -> new RuntimeException("Invalid store code"));
+            .orElseThrow(() -> new RuntimeException("Invalid store code or password"));
+        
+        if (!vendor.getPasswordSet()) {
+            throw new RuntimeException("Password not set. Please complete first-time login.");
+        }
+        
+        if (!passwordEncoder.matches(password, vendor.getPasswordHash())) {
+            throw new RuntimeException("Invalid store code or password");
+        }
         
         if (!vendor.getIsActive()) {
             throw new RuntimeException("Vendor account is deactivated");
         }
         
         if (!vendor.getEmailVerified()) {
-            throw new RuntimeException("Email not verified. Please complete email verification first.");
-        }
-        
-        if (vendor.getPasswordSet() == null || !vendor.getPasswordSet()) {
-            throw new RuntimeException("Password not set. Please use activation key for first-time login.");
-        }
-        
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        if (!encoder.matches(password, vendor.getPasswordHash())) {
-            throw new RuntimeException("Invalid password");
+            throw new RuntimeException("Email not verified. Please verify your email first.");
         }
         
         vendor.setLastLoginAt(LocalDateTime.now());
         vendor.setStationAppConnected(true);
         
+        // Auto-open store on login (vendor can manually close it later)
+        if (!vendor.getIsStoreOpen()) {
+            vendor.updateStoreStatus(true);
+        }
+        
         vendorRepository.save(vendor);
-
+        
         String token = jwtUtil.generateToken(vendor.getEmail(), "VENDOR", vendor.getId());
         return new VendorAuthResult(vendor, token);
     }

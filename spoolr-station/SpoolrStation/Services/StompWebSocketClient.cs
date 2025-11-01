@@ -563,6 +563,89 @@ namespace SpoolrStation.Services
         }
 
         /// <summary>
+        /// Update job status to PRINTING using REST API
+        /// POST /api/jobs/{jobId}/print
+        /// </summary>
+        public async Task<bool> UpdateJobStatusToPrintingAsync(long jobId)
+        {
+            return await UpdateJobStatusAsync(jobId, "print", "PRINTING");
+        }
+
+        /// <summary>
+        /// Update job status to READY using REST API
+        /// POST /api/jobs/{jobId}/ready
+        /// </summary>
+        public async Task<bool> UpdateJobStatusToReadyAsync(long jobId)
+        {
+            return await UpdateJobStatusAsync(jobId, "ready", "READY");
+        }
+
+        /// <summary>
+        /// Update job status to COMPLETED using REST API
+        /// POST /api/jobs/{jobId}/complete
+        /// </summary>
+        public async Task<bool> UpdateJobStatusToCompletedAsync(long jobId)
+        {
+            return await UpdateJobStatusAsync(jobId, "complete", "COMPLETED");
+        }
+
+        /// <summary>
+        /// Generic method to update job status via REST API
+        /// </summary>
+        private async Task<bool> UpdateJobStatusAsync(long jobId, string action, string statusName)
+        {
+            try
+            {
+                _logger.LogInformation("Updating job {JobId} status to {Status}", jobId, statusName);
+
+                if (_session == null || string.IsNullOrEmpty(_session.JwtToken))
+                {
+                    _logger.LogError("Session or JWT token is null - cannot update job status");
+                    return false;
+                }
+
+                using var httpClient = new HttpClient();
+                var baseUrl = GetApiBaseUrl();
+                var endpoint = $"/api/jobs/{jobId}/{action}";
+                var fullUrl = $"{baseUrl}{endpoint}";
+
+                _logger.LogInformation("Calling status update endpoint: {Endpoint}", fullUrl);
+
+                // Get fresh token and add JWT authorization header
+                var freshToken = await _authStateManager.GetValidTokenAsync();
+                if (string.IsNullOrEmpty(freshToken))
+                {
+                    _logger.LogError("No valid authentication token available for status update");
+                    return false;
+                }
+
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", freshToken);
+
+                // Make POST request
+                var httpResponse = await httpClient.PostAsync(fullUrl, null);
+
+                if (httpResponse.IsSuccessStatusCode)
+                {
+                    var responseContent = await httpResponse.Content.ReadAsStringAsync();
+                    _logger.LogInformation("Successfully updated job {JobId} to {Status}: {Response}", jobId, statusName, responseContent);
+                    return true;
+                }
+                else
+                {
+                    var errorContent = await httpResponse.Content.ReadAsStringAsync();
+                    _logger.LogError("Failed to update job {JobId} to {Status}: {StatusCode} - {Error}", 
+                        jobId, statusName, httpResponse.StatusCode, errorContent);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception while updating job {JobId} to {Status}", jobId, statusName);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Get health status of the WebSocket connection
         /// </summary>
         public WebSocketHealthStatus GetHealthStatus()
