@@ -53,7 +53,7 @@ cd PrintWaveApp/printwave-core
 ### 2. 🔐 **Security Setup (CRITICAL)**
 ```bash
 # Copy environment template
-cp .env.example .env
+cp .env .env
 
 # Edit with your secure credentials
 nano .env  # or your preferred editor
@@ -399,7 +399,7 @@ docker compose restart
 ### Environment Preparation
 ```bash
 # Production .env template
-cp .env.example .env.production
+cp .env .env.production
 
 # Use secure password generation
 openssl rand -base64 32 > db_password.txt

@@ -120,6 +120,7 @@ public class VendorController {
             VendorLoginResponse response = createLoginResponse(vendor);
             response.setToken(token);
             response.setMessage("First-time login successful! Password set. Welcome " + vendor.getBusinessName());
+            response.setSuccess(true);
             
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
@@ -137,6 +138,7 @@ public class VendorController {
             VendorLoginResponse response = createLoginResponse(vendor);
             response.setToken(token);
             response.setMessage("Login successful! Welcome back " + vendor.getBusinessName());
+            response.setSuccess(true);
             
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {

@@ -27,8 +27,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                   HttpServletResponse response, 
                                   FilterChain filterChain) throws ServletException, IOException {
         
+        // Log all incoming requests
+        System.out.println("=== INCOMING REQUEST ===");
+        System.out.println("Method: " + request.getMethod());
+        System.out.println("URI: " + request.getRequestURI());
+        System.out.println("Remote: " + request.getRemoteAddr());
+        
         // Extract JWT token from Authorization header
         final String authorizationHeader = request.getHeader("Authorization");
+        System.out.println("Authorization header: " + (authorizationHeader != null ? "Present (length: " + authorizationHeader.length() + ")" : "Missing"));
         
         String email = null;
         String jwt = null;
@@ -38,8 +45,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             jwt = authorizationHeader.substring(7); // Remove "Bearer " prefix
             try {
                 email = jwtUtil.extractEmail(jwt);
+                System.out.println("JWT token extracted email: " + email);
             } catch (Exception e) {
                 // Token is invalid or expired
+                System.out.println("JWT token validation failed: " + e.getMessage());
                 logger.error("JWT token validation failed: " + e.getMessage());
             }
         }
@@ -78,5 +87,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         
         // Continue with the filter chain
         filterChain.doFilter(request, response);
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        return request.getRequestURI().startsWith("/ws");
     }
 }

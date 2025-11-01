@@ -623,11 +623,92 @@ public class PrintJobService {
         PrintJob job = getJobForVendor(jobId, vendor);
         return fileStorageService.getStreamingUrlForPrinting(job.getS3ObjectKey());
     }
+    
+    public java.io.InputStream getJobFileStream(Long jobId, Vendor vendor) {
+        PrintJob job = getJobForVendor(jobId, vendor);
+        return fileStorageService.getFileStream(job.getS3ObjectKey());
+    }
+    
+    public PrintJob getJobById(Long jobId) {
+        return printJobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("Print job not found: " + jobId));
+    }
 
     private PrintJob getJobForVendor(Long jobId, Vendor vendor) {
-        PrintJob job = printJobRepository.findById(jobId).orElseThrow(() -> new RuntimeException("Print job not found: " + jobId));
-        if (!job.getVendor().getId().equals(vendor.getId())) throw new RuntimeException("Job belongs to a different vendor");
+        System.out.println("=== DEBUGGING JOB ACCESS ====");
+        System.out.println("Requested job ID: " + jobId);
+        System.out.println("Authenticated vendor: ID=" + vendor.getId() + ", Name='" + vendor.getBusinessName() + "', Email='" + vendor.getEmail() + "', StoreOpen=" + vendor.getIsStoreOpen());
+        
+        PrintJob job = printJobRepository.findById(jobId).orElseThrow(() -> {
+            System.out.println("ERROR: Print job not found: " + jobId);
+            return new RuntimeException("Print job not found: " + jobId);
+        });
+        
+        // Add detailed logging for debugging
+        System.out.println("Job " + jobId + " details: vendor_id=" + (job.getVendor() != null ? job.getVendor().getId() : "NULL") + 
+                ", vendor_name='" + (job.getVendor() != null ? job.getVendor().getBusinessName() : "NULL") + "'" +
+                ", status=" + job.getStatus() + 
+                ", tracking_code=" + job.getTrackingCode() +
+                ", created_at=" + job.getCreatedAt());
+        
+        // Check if job has no vendor assigned (this might be the issue)
+        if (job.getVendor() == null) {
+            System.out.println("CRITICAL: Job " + jobId + " has no vendor assigned! This indicates job was not properly assigned during creation.");
+            System.out.println("Job status: " + job.getStatus() + ", Customer: " + (job.getCustomer() != null ? job.getCustomer().getEmail() : "NULL"));
+            
+            // Get all vendors to see what's available
+            List<Vendor> allVendors = vendorRepository.findAll();
+            System.out.println("Available vendors in database: " + allVendors.size());
+            for (Vendor v : allVendors) {
+                System.out.println("  Vendor ID=" + v.getId() + ", Name='" + v.getBusinessName() + "', Active=" + v.getIsActive() + ", StoreOpen=" + v.getIsStoreOpen() + ", EmailVerified=" + v.getEmailVerified());
+            }
+            
+            throw new RuntimeException("Access denied - job " + jobId + " has no vendor assigned. This indicates a system error during job creation.");
+        }
+        
+        if (!job.getVendor().getId().equals(vendor.getId())) {
+            System.out.println("VENDOR MISMATCH for job " + jobId + ": job belongs to vendor_id=" + job.getVendor().getId() + " ('" + job.getVendor().getBusinessName() + "') but request from vendor_id=" + vendor.getId() + " ('" + vendor.getBusinessName() + "')");
+            throw new RuntimeException("Access denied - job " + jobId + " may not belong to your vendor account");
+        }
+        
+        System.out.println("SUCCESS: Job " + jobId + " access granted for vendor " + vendor.getId() + " ('" + vendor.getBusinessName() + "')");
+        System.out.println("=== END DEBUGGING ====");
         return job;
+    }
+    
+    /**
+     * Debug/fix method to reassign jobs to the correct vendor
+     * This can be used to fix orphaned jobs or incorrect vendor assignments
+     */
+    @Transactional
+    public PrintJob reassignJobToVendor(Long jobId, Vendor vendor) {
+        log.info("Attempting to reassign job {} to vendor {} ('{}')", jobId, vendor.getId(), vendor.getBusinessName());
+        
+        PrintJob job = printJobRepository.findById(jobId).orElseThrow(() -> 
+            new RuntimeException("Print job not found: " + jobId));
+        
+        log.info("Current job {} assignment: vendor_id={}, vendor_name='{}', status={}", 
+                jobId,
+                job.getVendor() != null ? job.getVendor().getId() : "NULL",
+                job.getVendor() != null ? job.getVendor().getBusinessName() : "NULL",
+                job.getStatus());
+        
+        // Update the job's vendor assignment
+        job.setVendor(vendor);
+        
+        // If the job doesn't have proper pricing, calculate it based on the new vendor
+        if (job.getPricePerPage() == null || job.getPricePerPage().compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal pricePerPage = getVendorPricePerPage(vendor, job.getIsColor(), job.getIsDoubleSided());
+            BigDecimal totalPrice = calculateTotalPrice(pricePerPage, job.getTotalPages(), job.getCopies());
+            job.setPricePerPage(pricePerPage);
+            job.setTotalPrice(totalPrice);
+            log.info("Updated pricing for job {}: price_per_page={}, total_price={}", jobId, pricePerPage, totalPrice);
+        }
+        
+        PrintJob savedJob = printJobRepository.save(job);
+        log.info("Successfully reassigned job {} to vendor {} ('{}')", jobId, vendor.getId(), vendor.getBusinessName());
+        
+        return savedJob;
     }
 
     private void validateJobRequest(MultipartFile file, PaperSize paperSize, int copies, Double customerLatitude, Double customerLongitude) {

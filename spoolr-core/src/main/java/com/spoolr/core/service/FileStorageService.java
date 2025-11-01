@@ -37,6 +37,9 @@ public class FileStorageService {
 
     private final MinioClient minioClient;
     private final String bucketName;
+    
+    @org.springframework.beans.factory.annotation.Value("${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}")
+    private String minioPublicEndpoint;
 
     @Autowired
     public FileStorageService(MinioClient minioClient, String minioBucketName) {
@@ -111,16 +114,19 @@ public class FileStorageService {
      */
     public String getStreamingUrlForPrinting(String objectKey) {
         try {
-            // Generate temporary URL valid for 30 minutes
-            // Long enough for printing, short enough for security
-            return minioClient.getPresignedObjectUrl(
+            // Generate presigned URL using internal minio:9000 connection
+            String internalUrl = minioClient.getPresignedObjectUrl(
                 GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
                     .bucket(bucketName)
                     .object(objectKey)
-                    .expiry(30, TimeUnit.MINUTES) // 30 minutes expiry
+                    .expiry(30, TimeUnit.MINUTES)
                     .build()
             );
+            
+            // Replace internal Docker hostname with public-facing hostname
+            // This makes the URL accessible from Station App on host machine
+            return internalUrl.replace("http://minio:9000", minioPublicEndpoint);
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate streaming URL for printing: " + e.getMessage(), e);
         }

@@ -1,0 +1,188 @@
+<UserControl x:Class="SpoolrStation.Views.JobsQueueView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:SpoolrStation.Views"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="800">
+    
+    <UserControl.Resources>
+        <!-- Converters -->
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        
+        <Style x:Key="JobCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="15"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#000000" Direction="270" ShadowDepth="2" 
+                                     BlurRadius="8" Opacity="0.1"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <Style x:Key="JobTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#2c3e50"/>
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </Style>
+        
+        <Style x:Key="JobInfoStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#7f8c8d"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+        
+        <Style x:Key="JobActionButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="5,0"/>
+        </Style>
+    </UserControl.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#2c3e50" Padding="20,15">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="📋" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Accepted Jobs Queue" 
+                          FontSize="20" 
+                          FontWeight="Bold" 
+                          Foreground="White" 
+                          VerticalAlignment="Center"/>
+                <Border Background="#27ae60" 
+                       CornerRadius="12" 
+                       Padding="8,2" 
+                       Margin="15,0,0,0">
+                    <TextBlock Text="{Binding PendingJobs, StringFormat='{}{0} pending'}" 
+                              FontSize="12" 
+                              FontWeight="Bold" 
+                              Foreground="White"/>
+                </Border>
+            </StackPanel>
+        </Border>
+        
+        <!-- Jobs List -->
+        <ScrollViewer Grid.Row="1" 
+                     VerticalScrollBarVisibility="Auto" 
+                     HorizontalScrollBarVisibility="Disabled"
+                     Background="#ecf0f1">
+            
+            <StackPanel Margin="20">
+                <!-- Pending Jobs Section -->
+                <TextBlock Text="PENDING JOBS" 
+                          FontSize="14" 
+                          FontWeight="Bold" 
+                          Foreground="#7f8c8d" 
+                          Margin="0,0,0,15"/>
+                
+                <!-- Jobs List -->
+                <ItemsControl ItemsSource="{Binding AcceptedJobs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource JobCardStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Job Info -->
+                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                        <TextBlock Text="{Binding JobSummary}" Style="{StaticResource JobTitleStyle}"/>
+                                        <TextBlock Text="{Binding PrintSpecs}" Style="{StaticResource JobInfoStyle}"/>
+                                        <TextBlock Text="{Binding PriceDisplay}" Style="{StaticResource JobInfoStyle}" 
+                                                  Foreground="#27ae60" FontWeight="Medium"/>
+                                    </StackPanel>
+                                    
+                                    <!-- Status Badge -->
+                                    <Border Grid.Row="0" Grid.Column="1" 
+                                           Background="#f39c12" 
+                                           CornerRadius="15" 
+                                           Padding="10,5" 
+                                           VerticalAlignment="Top">
+                                        <TextBlock Text="ACCEPTED" 
+                                                  FontSize="10" 
+                                                  FontWeight="Bold" 
+                                                  Foreground="White"/>
+                                    </Border>
+                                    
+                                    <!-- Timestamps -->
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" 
+                                               Orientation="Horizontal" 
+                                               Margin="0,10,0,0">
+                                        <TextBlock Text="Accepted:" Style="{StaticResource JobInfoStyle}" FontWeight="Medium"/>
+                                        <TextBlock Text="{Binding AcceptedAt, StringFormat='HH:mm:ss'}" 
+                                                  Style="{StaticResource JobInfoStyle}" Margin="5,2,15,2"/>
+                                        <TextBlock Text="Job ID:" Style="{StaticResource JobInfoStyle}" FontWeight="Medium"/>
+                                        <TextBlock Text="{Binding JobId}" Style="{StaticResource JobInfoStyle}" Margin="5,2"/>
+                                    </StackPanel>
+                                    
+                                    <!-- Action Buttons -->
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" 
+                                               Orientation="Horizontal" 
+                                               HorizontalAlignment="Right"
+                                               Margin="0,15,0,0">
+                                        <Button Content="🖨️ Print" 
+                                               Style="{StaticResource JobActionButtonStyle}"
+                                               Background="#27ae60" 
+                                               Foreground="White"
+                                               Command="{Binding DataContext.PrintJobCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                               CommandParameter="{Binding}"/>
+                                        <Button Content="👁️ Preview" 
+                                               Style="{StaticResource JobActionButtonStyle}"
+                                               Background="#3498db" 
+                                               Foreground="White"
+                                               Command="{Binding DataContext.PreviewJobCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                               CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                
+                <!-- Empty State -->
+                <Border Background="White" 
+                       CornerRadius="8" 
+                       Padding="40" 
+                       Margin="0,0,0,10"
+                       Visibility="{Binding HasNoAcceptedJobs, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="📋" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                        <TextBlock Text="No Accepted Jobs" 
+                                  FontSize="18" 
+                                  FontWeight="Medium" 
+                                  HorizontalAlignment="Center" 
+                                  Margin="0,0,0,10"/>
+                        <TextBlock Text="Jobs you accept will appear here for processing" 
+                                  FontSize="14" 
+                                  Foreground="#7f8c8d" 
+                                  HorizontalAlignment="Center" 
+                                  TextAlignment="Center" 
+                                  TextWrapping="Wrap" 
+                                  MaxWidth="300"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

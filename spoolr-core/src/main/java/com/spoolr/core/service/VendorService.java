@@ -59,17 +59,23 @@ public class VendorService {
     public Vendor verifyVendorEmail(String token) {
         Vendor vendor = vendorRepository.findByVerificationToken(token)
             .orElseThrow(() -> new RuntimeException("Invalid verification token"));
-        
+
+        // If the email is already verified, do nothing further.
+        // This makes the endpoint idempotent and prevents re-sending activation keys.
+        if (vendor.getEmailVerified() != null && vendor.getEmailVerified()) {
+            return vendor;
+        }
+
         vendor.setEmailVerified(true);
-        vendor.setVerificationToken(null);
-        
+        vendor.setVerificationToken(null); // This is now safe to do.
+
         vendor.setActivationKey(generateActivationKey());
         vendor.setActivationKeySent(true);
-        
+
         Vendor savedVendor = vendorRepository.save(vendor);
-        
+
         emailService.sendVendorActivationEmail(savedVendor);
-        
+
         return savedVendor;
     }
     

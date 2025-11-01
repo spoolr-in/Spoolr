@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Test PDF Document</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #2196F3;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #2196F3;
+            margin: 0;
+            font-size: 28px;
+        }
+        .header p {
+            color: #666;
+            margin: 10px 0 0 0;
+            font-size: 16px;
+        }
+        .section {
+            margin: 30px 0;
+        }
+        .section h2 {
+            color: #2196F3;
+            border-left: 4px solid #2196F3;
+            padding-left: 15px;
+            margin-bottom: 15px;
+        }
+        .specs {
+            background-color: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .specs h3 {
+            color: #495057;
+            margin-top: 0;
+        }
+        .spec-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .spec-item:last-child {
+            border-bottom: none;
+        }
+        .spec-label {
+            font-weight: bold;
+            color: #495057;
+        }
+        .spec-value {
+            color: #6c757d;
+        }
+        .page-break {
+            page-break-after: always;
+        }
+        .footer {
+            position: fixed;
+            bottom: 2cm;
+            left: 2cm;
+            right: 2cm;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+            border-top: 1px solid #dee2e6;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🖨️ Spoolr PDF Test Document</h1>
+        <p>Multi-page PDF for testing PdfiumViewer integration</p>
+    </div>
+
+    <div class="section">
+        <h2>Page 1: Document Information</h2>
+        <p>This is a test PDF document created to verify that the SpoolrStation PDF rendering system works correctly with PdfiumViewer.</p>
+        
+        <div class="specs">
+            <h3>🔒 Print Specifications (Locked)</h3>
+            <div class="spec-item">
+                <span class="spec-label">Paper Size:</span>
+                <span class="spec-value">A4 (210 × 297 mm)</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Orientation:</span>
+                <span class="spec-value">Portrait</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Color Mode:</span>
+                <span class="spec-value">Black & White</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Duplex:</span>
+                <span class="spec-value">Single-sided</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Copies:</span>
+                <span class="spec-value">2</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Quality:</span>
+                <span class="spec-value">600 DPI</span>
+            </div>
+            <div class="spec-item">
+                <span class="spec-label">Total Cost:</span>
+                <span class="spec-value">₹15.50</span>
+            </div>
+        </div>
+
+        <p>The PDF renderer should be able to:</p>
+        <ul>
+            <li>Load this PDF document from memory</li>
+            <li>Extract and render individual pages as high-quality images</li>
+            <li>Provide page navigation controls</li>
+            <li>Support zoom in/out functionality</li>
+            <li>Display page information (current page / total pages)</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <div class="section">
+        <h2>Page 2: Features Testing</h2>
+        <p>This second page tests the page navigation functionality. You should be able to navigate between pages using the Previous/Next buttons.</p>
+        
+        <h3>Expected Navigation Behavior:</h3>
+        <ul>
+            <li><strong>Page 1:</strong> Previous button disabled, Next button enabled</li>
+            <li><strong>Page 2:</strong> Previous button enabled, Next button enabled</li>
+            <li><strong>Page 3:</strong> Previous button enabled, Next button disabled</li>
+        </ul>
+
+        <h3>Zoom Functionality:</h3>
+        <p>The zoom controls should allow you to scale the document view from 25% to 400% with the following preset levels:</p>
+        <ul>
+            <li>25% - Very small overview</li>
+            <li>50% - Small overview</li>
+            <li>75% - Readable but compact</li>
+            <li>100% - Default size (fit to width)</li>
+            <li>125% - Slightly enlarged</li>
+            <li>150% - Large and detailed</li>
+            <li>200% - Very large</li>
+            <li>300% - Extremely large</li>
+            <li>400% - Maximum zoom</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <div class="section">
+        <h2>Page 3: Quality Assessment</h2>
+        <p>This final page tests the rendering quality and ensures that text, borders, and styling are preserved correctly.</p>
+
+        <h3>Text Quality Test:</h3>
+        <p style="font-size: 8px;">Very small text (8px) - should be readable when zoomed in</p>
+        <p style="font-size: 12px;">Small text (12px) - standard body text size</p>
+        <p style="font-size: 16px;">Medium text (16px) - larger body text</p>
+        <p style="font-size: 20px;">Large text (20px) - heading size</p>
+        <p style="font-size: 24px;">Very large text (24px) - large heading</p>
+
+        <h3>Border and Styling Test:</h3>
+        <div style="border: 1px solid #333; padding: 10px; margin: 10px 0;">
+            Thin border (1px solid) - should be crisp and clear
+        </div>
+        <div style="border: 3px solid #2196F3; padding: 10px; margin: 10px 0;">
+            Thick colored border (3px solid blue) - should maintain color and thickness
+        </div>
+        <div style="background: linear-gradient(to right, #f8f9fa, #e9ecef); padding: 10px; margin: 10px 0;">
+            Background gradient - should render smoothly (if supported)
+        </div>
+
+        <div class="specs">
+            <h3>✅ PDF Rendering Test Complete</h3>
+            <p>If you can see this page clearly with all formatting intact, the PDF rendering system is working correctly!</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        SpoolrStation PDF Rendering Test - Generated for PdfiumViewer Integration Testing
+    </div>
+</body>
+</html>

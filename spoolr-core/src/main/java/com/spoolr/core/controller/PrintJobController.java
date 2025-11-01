@@ -555,22 +555,61 @@ public class PrintJobController {
     }
 
     /**
-     * 🌐 Get file streaming URL for printing (Station App)
+     * 🌐 Stream file directly for printing (Station App)
+     * Backend proxies the file from MinIO to avoid signature issues
      */
     @GetMapping("/jobs/{jobId}/file")
     @PreAuthorize("hasRole('VENDOR')")
-    public ResponseEntity<?> getJobFileUrl(@PathVariable Long jobId,
-                                         HttpServletRequest request) {
+    public ResponseEntity<?> streamJobFile(@PathVariable Long jobId,
+                                          HttpServletRequest request) {
+        System.out.println("=== STREAMING FILE FOR JOB " + jobId + " ===");
+        
         try {
             Vendor vendor = getAuthenticatedVendor(request);
-            String streamingUrl = printJobService.getJobFileStreamingUrl(jobId, vendor);
+            System.out.println("Authenticated vendor: ID=" + vendor.getId() + ", Name='" + vendor.getBusinessName() + "'");
+            
+            // Get file stream from MinIO through backend
+            java.io.InputStream fileStream = printJobService.getJobFileStream(jobId, vendor);
+            PrintJob job = printJobService.getJobById(jobId);
+            
+            System.out.println("SUCCESS: Streaming file for job " + jobId);
+            
+            // Stream file directly to Station App
+            return ResponseEntity.ok()
+                    .header("Content-Type", "application/pdf")
+                    .header("Content-Disposition", "inline; filename=\"" + job.getOriginalFileName() + "\"")
+                    .body(new org.springframework.core.io.InputStreamResource(fileStream));
+            
+        } catch (RuntimeException e) {
+            System.out.println("ERROR streaming file: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "error", e.getMessage()
+            ));
+        }
+    }
+    
+    /**
+     * 🔧 Reassign job to current vendor (Debug/Fix utility)
+     * This is a utility endpoint to fix orphaned jobs or incorrect vendor assignments
+     */
+    @PostMapping("/jobs/{jobId}/reassign")
+    @PreAuthorize("hasRole('VENDOR')")
+    public ResponseEntity<?> reassignJobToVendor(@PathVariable Long jobId,
+                                                HttpServletRequest request) {
+        try {
+            Vendor vendor = getAuthenticatedVendor(request);
+            PrintJob reassignedJob = printJobService.reassignJobToVendor(jobId, vendor);
             
             return ResponseEntity.ok(Map.of(
                 "success", true,
-                "streamingUrl", streamingUrl,
-                "expiryMinutes", 30,
-                "instructions", "Use this URL to stream the file directly to your printer. URL expires in 30 minutes.",
-                "jobId", jobId
+                "message", "Job successfully reassigned to your vendor account",
+                "jobId", reassignedJob.getId(),
+                "trackingCode", reassignedJob.getTrackingCode(),
+                "status", reassignedJob.getStatus().name(),
+                "vendorId", vendor.getId(),
+                "vendorName", vendor.getBusinessName()
             ));
             
         } catch (RuntimeException e) {

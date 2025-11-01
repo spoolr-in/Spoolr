@@ -246,4 +246,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Suraj Hiregowda**: Bachelor's student studying at Symbiosis Skills and Professional University Pune, majoring in Computer Science.
 
   [<img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" />](https://www.linkedin.com/in/6132suraj/)
-  [<img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" />](https://github.com/Suraj-132)️
+  - [<img src="https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white" />](https://github.com/Suraj-132)️
+
+## 📝 Session Summaries
+
+- [Session ending 2025-08-18 18:50:00 (Job Submission Flow Refactoring)](./GEMINI_session_summary_20250818_185000.md)

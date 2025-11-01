@@ -46,9 +46,19 @@ public class VendorLoginResponse {
 
     // JWT Token
     private String token;
+
+    private boolean success;
     
     // Constructor for successful login
     public VendorLoginResponse(String message) {
         this.message = message;
+    }
+
+    public void setSuccess(boolean success) {
+        this.success = success;
+    }
+
+    public boolean isSuccess() {
+        return success;
     }
 }

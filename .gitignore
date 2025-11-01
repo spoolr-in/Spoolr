@@ -1,26 +1,82 @@
-# Compiled class file
+# ============================================
+# Spoolr Project .gitignore
+# ============================================
+
+# ============ JAVA / SPRING BOOT ============
 *.class
-
-# Log file
 *.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/
+mvnw
+mvnw.cmd
 *.jar
 *.war
 *.nar
 *.ear
+hs_err_pid*
+replay_pid*
+
+# ============ .NET / C# ============
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.vspscc
+*.vssscc
+.vs/
+*.DotSettings.user
+
+# ============ NODE.JS / NEXT.JS ============
+node_modules/
+.next/
+out/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ============ ENVIRONMENT FILES ============
+.env
+.env.local
+*.env
+setLocalEnv.bat
+
+# ============ IDE FILES ============
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ============ LOGS ============
+*.log
+logs/
+
+# ============ TEMP FILES ============
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# ============ BUILD ARTIFACTS ============
+build/
+dist/
 *.zip
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+# ============ PROJECT SPECIFIC ============
 project_description.txt
-.env
+spoolr_codebase_analysis.txt
+*.cs.bak
+run_spoolr_with_console.bat

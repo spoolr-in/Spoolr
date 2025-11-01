@@ -29,6 +29,10 @@ public class MinIOConfig {
     @Value("${MINIO_ENDPOINT:http://localhost:9000}")
     private String endpoint;
     
+    @Getter
+    @Value("${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}")
+    private String publicEndpoint;
+    
     @Value("${MINIO_ACCESS_KEY:spoolr_admin}")
     private String accessKey;
     
@@ -36,13 +40,8 @@ public class MinIOConfig {
     private String secretKey;
     
     /**
-     * Create MinioClient bean for dependency injection
-
-     * This creates a "client" object that our application can use
-     * to talk to MinIO storage (upload files, download files, etc.)
-
-     * Bean annotation means Spring will manage this object and
-     * inject it wherever we need it (like in FileStorageService)
+     * Create MinioClient bean for all operations
+     * Uses internal Docker hostname (minio:9000) for backend-to-MinIO communication
      */
     @Bean
     public MinioClient minioClient() {

@@ -12,6 +12,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.messaging.simp.SimpMessageType;
 
 import java.util.Arrays;
 
@@ -61,6 +62,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/jobs/qr-anonymous-upload").permitAll() // Anonymous upload
                 .requestMatchers("/api/jobs/status/**").permitAll() // Public job tracking
                 .requestMatchers("/api/jobs/quote").permitAll() // Public quote endpoint
+                .requestMatchers("/ws/**").permitAll() // Allow WebSocket connections
+                .requestMatchers("/debug/beans").permitAll() // Allow access to the debug endpoint
                 
                 // Protected user endpoints (authentication required)
                 .requestMatchers("/api/users/profile").authenticated()

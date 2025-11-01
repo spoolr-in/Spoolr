@@ -27,14 +27,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // The endpoint that the client (Station App) will connect to  initiate the WebSocket connection.
-        // STOMP is a simple messaging protocol that works on top of WebSockets.
-        // The endpoint is set to "/ws".
+        // Raw WebSocket endpoint for STOMP protocol
+        // Station App (C# ClientWebSocket) connects directly without SockJS wrapper
+        // Modern browsers also support raw WebSocket without fallback needed
         registry.addEndpoint("/ws")
-                // setAllowedOrigins("*") allows connections from any domain.
-                // This is useful for development to avoid CORS (Cross-Origin Resource Sharing) issues.
-                // In a production environment, this should be restricted to the specific domains
-                // of your frontend applications for security.
                 .setAllowedOrigins("*");
     }
 
