@@ -22,6 +22,16 @@ RUN mvn clean package -DskipTests \
 # Stage 2: Runtime stage with Java 21 Temurin JRE
 FROM eclipse-temurin:21-jre-jammy
 
+# Install LibreOffice for document conversion (DOCX, XLSX, PPTX to PDF)
+RUN apt-get update && apt-get install -y \
+    libreoffice \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
+    fonts-liberation \
+    fonts-dejavu \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set working directory
 WORKDIR /app
 

@@ -9,6 +9,7 @@ import com.spoolr.core.enums.PaperSize;
 import com.spoolr.core.repository.PrintJobRepository;
 import com.spoolr.core.repository.UserRepository;
 import com.spoolr.core.repository.VendorRepository;
+import com.spoolr.core.util.ConvertedPdfFile;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -44,6 +45,7 @@ public class PrintJobService {
     private final NotificationService notificationService;
     private final EmailService emailService;
     private final TaskScheduler taskScheduler;
+    private final DocumentConversionService documentConversionService;
     private final Random random = new Random();
     private static final Logger log = LoggerFactory.getLogger(PrintJobService.class);
 
@@ -58,7 +60,8 @@ public class PrintJobService {
                           FileStorageService fileStorageService,
                           NotificationService notificationService,
                           EmailService emailService,
-                          TaskScheduler taskScheduler) {
+                          TaskScheduler taskScheduler,
+                          DocumentConversionService documentConversionService) {
         this.printJobRepository = printJobRepository;
         this.userRepository = userRepository;
         this.vendorRepository = vendorRepository;
@@ -66,6 +69,7 @@ public class PrintJobService {
         this.notificationService = notificationService;
         this.emailService = emailService;
         this.taskScheduler = taskScheduler;
+        this.documentConversionService = documentConversionService;
     }
 
     public PrintJob createPrintJob(MultipartFile file,
@@ -87,9 +91,37 @@ public class PrintJobService {
         PrintJob printJob = new PrintJob();
 
         try {
-            // Upload file to MinIO cloud storage using the generated identifier
-            FileStorageService.FileUploadResult uploadResult = fileStorageService.uploadFile(file, fileIdentifier);
-            int totalPages = countDocumentPages(file, uploadResult.getFileType());
+            // Detect file type
+            FileType fileType = FileType.fromFileName(file.getOriginalFilename());
+            log.info("Processing {} file: {}", fileType, file.getOriginalFilename());
+            
+            // Convert non-PDF formats to PDF
+            MultipartFile fileToUpload = file;
+            if (fileType != FileType.PDF) {
+                log.info("Converting {} to PDF for printing", fileType);
+                byte[] pdfBytes = documentConversionService.convertToPdf(
+                    file.getBytes(), 
+                    fileType, 
+                    file.getOriginalFilename()
+                );
+                
+                if (pdfBytes == null) {
+                    throw new RuntimeException("Failed to convert " + fileType + " to PDF. Please try uploading a PDF directly.");
+                }
+                
+                // Create a new MultipartFile wrapper for the converted PDF
+                fileToUpload = new ConvertedPdfFile(
+                    pdfBytes,
+                    file.getOriginalFilename().replaceAll("\\.[^.]+$", ".pdf"),
+                    file.getOriginalFilename()
+                );
+                
+                log.info("Conversion successful: {} -> PDF ({} bytes)", fileType, pdfBytes.length);
+            }
+            
+            // Upload file (now always PDF) to MinIO cloud storage
+            FileStorageService.FileUploadResult uploadResult = fileStorageService.uploadFile(fileToUpload, fileIdentifier);
+            int totalPages = countDocumentPages(fileToUpload, FileType.PDF);
 
             // Calculate pricing before creating the PrintJob object
             // This is a temporary calculation for the initial save, actual pricing will be set during vendor matching
