@@ -62,52 +62,6 @@ public partial class MainWindow : Window
     }
     
     /// <summary>
-    /// Test the DocumentPreviewWindow with mock data
-    /// </summary>
-    private void TestDocumentPreview_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            // Create mock print job data
-            var mockJob = new DocumentPrintJob
-            {
-                JobId = 12345,
-                TrackingCode = "PJ12345",
-                CustomerName = "John Smith",
-                CustomerPhone = "+91 98765 43210",
-                OriginalFileName = "Sri_Hanuman_Chalisa_English.pdf",
-                FileType = "PDF",
-                FileSizeBytes = 1200000, // Estimated size
-                TotalPages = 2, // Estimated pages
-                Status = "AWAITING_ACCEPTANCE",
-                StreamingUrl = @"C:\Users\vdkul\Downloads\Sri_Hanuman_Chalisa_English.pdf", // Your PDF file
-                PrintSpecs = new LockedPrintSpecifications
-                {
-                    PaperSize = "A4",
-                    Orientation = "PORTRAIT",
-                    IsColor = false,
-                    IsDoubleSided = false,
-                    Copies = 2,
-                    PrintQuality = 600,
-                    TotalCost = 15.50m,
-                    TotalPages = 5
-                }
-            };
-            
-            // Open DocumentPreviewWindow
-            var previewWindow = new SpoolrStation.Views.DocumentPreviewWindow(mockJob);
-            previewWindow.Show();
-            
-            ViewModel.StatusText = "Document preview window opened with test data";
-        }
-        catch (Exception ex)
-        {
-            WpfMessageBox.Show($"Error opening document preview: {ex.Message}", 
-                "Preview Error", WpfMessageBoxButton.OK, WpfMessageBoxImage.Error);
-        }
-    }
-    
-    /// <summary>
     /// Initializes the main window with authenticated session information
     /// </summary>
     /// <param name="session">User session from successful login</param>
