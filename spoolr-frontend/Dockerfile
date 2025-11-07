@@ -20,6 +20,10 @@ COPY --from=base /app/node_modules ./node_modules
 # Copy the rest of the application code
 COPY . .
 
+# Pass build-time argument as an environment variable
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build the Next.js application
 RUN npm run build
 

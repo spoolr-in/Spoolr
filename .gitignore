@@ -81,3 +81,4 @@ spoolr_codebase_analysis.txt
 *.cs.bak
 run_spoolr_with_console.bat
 spoolr-station-build/
+spoolr-core\spoolr-temp.pem

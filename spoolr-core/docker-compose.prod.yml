@@ -1,90 +1,120 @@
-# 🚀 SPOOLR PRODUCTION DEPLOYMENT - Following Your ObjectVault Pattern
+# 🚀 SPOOLR PRODUCTION DEPLOYMENT 
 # Database & MinIO run continuously, only app container gets updated
 
-version: '3.8'
+version: "3.9"
 
 services:
-  # 🐘 PostgreSQL - Runs continuously (like your MySQL)
-  postgresql:
-    image: postgres:15-alpine
-    container_name: spoolr-postgresql-prod
-    hostname: spoolr-postgresql-prod
-    restart: always
+  # 🗄 PostgreSQL Database Service
+  postgres:
+    image: postgres:15
+    container_name: spoolr-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: spoolr_production
-      POSTGRES_USER: spoolr_prod_user  
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - '5433:5432'  # Different port to avoid dev conflicts
+      - "5433:5432"
     volumes:
-      - spoolr_postgres_prod_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U spoolr_prod_user -d spoolr_production"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - spoolr-network
 
-  # 📦 MinIO - Runs continuously (same as your setup)  
+  # 📁 MinIO Object Storage Service
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-07-04T14-25-45Z
-    container_name: spoolr-minio-prod
-    command: server /data --console-address ":9001"
+    image: minio/minio:latest
+    container_name: spoolr-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001" --address ":9000"
     ports:
       - "9000:9000"
       - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
-      - spoolr_minio_prod_data:/data
-    restart: always
+      - minio_data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 20s
       retries: 3
+    networks:
+      - spoolr-network
 
-  # 🚀 Spoolr Core API - Gets updated via CI/CD (like your objectvault)
-  spoolr-core:
-    container_name: spoolr-core-prod
-    depends_on:
-      - postgresql
-      - minio
-    image: spoolr/spoolr-core:latest
+ # 🌐 Spoolr Frontend Service
+  spoolr-frontend:
+    image: athyadw45/spoolr-frontend:latest
+    container_name: spoolr-frontend
     restart: unless-stopped
     environment:
-      # Database connection
-      DB_URL: jdbc:postgresql://postgresql:5432/spoolr_production
-      DB_USERNAME: spoolr_prod_user
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      
-      # Security
-      JWT_SECRET: ${JWT_SECRET}
-      
-      # Email
+      NEXT_PUBLIC_API_URL: http://spoolr-core:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      spoolr-core:
+        condition: service_healthy
+    networks:
+      - spoolr-network
+
+  # 🚀 Spoolr Core API Service
+  spoolr-core:
+    image: athyadw45/spoolr-core:latest
+    container_name: spoolr-core
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      DDL_AUTO: ${DDL_AUTO}
+      SHOW_SQL: ${SHOW_SQL}
+
+      SERVER_PORT: ${SERVER_PORT}
+
       EMAIL_USERNAME: ${EMAIL_USERNAME}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
-      
-      # MinIO
+
+      JWT_SECRET: ${JWT_SECRET}
+
       MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET_NAME: spoolr-production-documents
-      
-      # Production settings
-      SPRING_PROFILES_ACTIVE: production
-      BASE_URL: ${BASE_URL}
-      
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME}
+
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      SPRING_SECURITY_USER_NAME: healthchecker
+      SPRING_SECURITY_USER_PASSWORD: somepassword
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "-u", "healthchecker:somepassword", "http://localhost:8080/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - spoolr-network
+    volumes:
+      - app_logs:/app/logs
 
+# 💾 Named volumes
 volumes:
-  spoolr_postgres_prod_data:
-    driver: local
-  spoolr_minio_prod_data:
-    driver: local
+  postgres_data:
+  minio_data:
+  app_logs:
+
+# 🌐 Network
+networks:
+  spoolr-network:
+    driver: bridge
