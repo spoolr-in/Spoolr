@@ -80,3 +80,4 @@ project_description.txt
 spoolr_codebase_analysis.txt
 *.cs.bak
 run_spoolr_with_console.bat
+spoolr-station-build/
