@@ -91,6 +91,24 @@ services:
     volumes:
       - app_logs:/app/logs
 
+  # 🌐 Spoolr Frontend Service (Next.js App)
+  spoolr-frontend:
+    build:
+      context: ../spoolr-frontend # Path to the frontend Dockerfile
+      dockerfile: Dockerfile
+    container_name: spoolr-frontend
+    restart: unless-stopped
+    environment:
+      # Set the backend API URL for the frontend
+      NEXT_PUBLIC_API_URL: http://spoolr-core:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      spoolr-core:
+        condition: service_healthy
+    networks:
+      - spoolr-network
+
 # 💾 Named volumes for data persistence
 volumes:
   postgres_data:

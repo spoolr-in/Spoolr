@@ -4,15 +4,16 @@
 import React from 'react';
 
 interface SuccessModalProps {
+  title: string;
   message: string;
   onClose: () => void;
 }
 
-const SuccessModal: React.FC<SuccessModalProps> = ({ message, onClose }) => {
+const SuccessModal: React.FC<SuccessModalProps> = ({ title, message, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
       <div className="bg-white p-8 rounded-lg shadow-xl text-center max-w-sm w-full border border-gray-200">
-        <h2 className="text-3xl font-bold text-green-600 mb-4">Success!</h2>
+        <h2 className="text-3xl font-bold text-green-600 mb-4">{title}</h2>
         <p className="text-gray-800 mb-6">{message}</p>
         <button
           onClick={onClose}

@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios';
 import { Upload, MapPin, Printer, DollarSign, CheckCircle, XCircle, Loader2, PackageCheck } from 'lucide-react';
-import LocationPickerMap from '@/components/LocationPickerMap';
+import dynamic from 'next/dynamic';
+
+const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), { 
+  ssr: false 
+});
 
 // Modal Component
 const JobSubmittedModal = ({ isOpen, onClose, trackingCode, totalPrice }) => {
@@ -71,31 +75,33 @@ const SubmitJobPage = () => {
 
   // Function to get current location (for initial setup)
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/login');
-      return;
-    }
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCustomerLatitude(position.coords.latitude);
-          setCustomerLongitude(position.coords.longitude);
-        },
-        (err) => {
-          console.error("Geolocation error:", err);
-          setError("Could not get your location. Please enter manually.");
-          // Default to a known location if geolocation fails (e.g., Bangalore)
-          setCustomerLatitude(12.9716);
-          setCustomerLongitude(77.5946);
-        }
-      );
-    } else {
-      setError("Geolocation is not supported by your browser. Please enter manually.");
-      // Default to a known location if geolocation not supported
-      setCustomerLatitude(12.9716);
-      setCustomerLongitude(77.5946);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setCustomerLatitude(position.coords.latitude);
+            setCustomerLongitude(position.coords.longitude);
+          },
+          (err) => {
+            console.error("Geolocation error:", err);
+            setError("Could not get your location. Please enter manually.");
+            // Default to a known location if geolocation fails (e.g., Bangalore)
+            setCustomerLatitude(12.9716);
+            setCustomerLongitude(77.5946);
+          }
+        );
+      } else {
+        setError("Geolocation is not supported by your browser. Please enter manually.");
+        // Default to a known location if geolocation not supported
+        setCustomerLatitude(12.9716);
+        setCustomerLongitude(77.5946);
+      }
     }
   }, [router]);
 
@@ -105,12 +111,17 @@ const SubmitJobPage = () => {
     }
   };
 
-  const getAuthHeaders = () => ({
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+  const getAuthHeaders = () => {
+    if (typeof window !== 'undefined') {
+      return {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      };
+    }
+    return {};
+  };
 
   const resetForm = () => {
     setFile(null);

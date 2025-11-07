@@ -1,7 +1,7 @@
 
 "use client";
 
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -70,15 +70,9 @@ const LocationPickerMap: React.FC<LocationPickerMapProps> = ({ onLocationChange,
       locationerror(e) {
         setLocateMessage(`Location error: ${e.message}`);
       },
-      // Store map instance in ref
-      whenReady: (event) => {
-        mapRef.current = event.target;
-        if (!position) {
-          setLocateMessage('Locating...');
-          map.locate();
-        }
-      },
     });
+
+    // Handle manual drag of marker
 
     // Handle manual drag of marker
     const eventHandlers = {
@@ -142,6 +136,20 @@ const LocationPickerMap: React.FC<LocationPickerMapProps> = ({ onLocationChange,
     }
   }, []);
 
+  const MapInitializer = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (map) {
+        mapRef.current = map;
+        if (!position) {
+          setLocateMessage('Locating...');
+          map.locate();
+        }
+      }
+    }, [map]);
+    return null;
+  };
+
   return (
     <>
       <div className="mb-4">
@@ -172,13 +180,13 @@ const LocationPickerMap: React.FC<LocationPickerMapProps> = ({ onLocationChange,
         zoom={13}
         scrollWheelZoom={false}
         style={{ height: '400px', width: '100%', borderRadius: '15px', zIndex: 0 }}
-        ref={mapRef as any} // Assign ref to MapContainer
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <LocationMarker />
+        <MapInitializer />
       </MapContainer>
       <div className="mt-4 text-center">
         <button
