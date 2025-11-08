@@ -12,6 +12,7 @@ public class SpoolrCoreApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(SpoolrCoreApplication.class, args);
+		System.out.println("Spoolr Core Application started successfully.");
 	}
 
 }
