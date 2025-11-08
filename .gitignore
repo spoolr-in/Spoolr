@@ -82,3 +82,6 @@ spoolr_codebase_analysis.txt
 run_spoolr_with_console.bat
 spoolr-station-build/
 spoolr-core\spoolr-temp.pem
+
+# Allow committing the Windows installer in frontend public assets
+!spoolr-frontend/public/SpoolrStationSetup.exe

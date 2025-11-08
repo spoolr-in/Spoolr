@@ -40,7 +40,8 @@ const VerifyEmailContent = () => {
   }, [token]);
 
   const handleDownload = () => {
-    window.location.href = '/Spoolr.exe';
+    // Serve the installer from the Next.js public folder
+    window.location.href = '/SpoolrStationSetup.exe';
   };
 
   return (
