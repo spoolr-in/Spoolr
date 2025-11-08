@@ -259,7 +259,7 @@ public class EmailService {
             try {
                 SimpleMailMessage message = new SimpleMailMessage();
                 message.setTo(customerEmail);
-                message.setSubject("PrintWave - Your Print Job Is Ready for Pickup! ✅");
+                message.setSubject("Spoolr- Your Print Job Is Ready for Pickup! ✅");
                 message.setText("Hello " + (customerName != null ? customerName : "Customer") + ",\n\n" +
                         "🎉 GREAT NEWS! Your print job is ready for pickup!\n\n" +
                         "📄 Job Details:\n" +
@@ -274,8 +274,8 @@ public class EmailService {
                         "💳 Payment: Already processed online\n\n" +
                         "Show this tracking code when you arrive: " + trackingCode + "\n\n" +
                         "Track your job: " + frontendBaseUrl + "/track?code=" + trackingCode + "\n\n" +
-                        "Thank you for using PrintWave!\n\n" +
-                        "PrintWave Team");
+                        "Thank you for using Spoolr!\n\n" +
+                        "Spoolr Team");
 
                 mailSender.send(message);
                 System.out.println("✅ Ready email sent successfully to: " + customerEmail);

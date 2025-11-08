@@ -49,16 +49,14 @@ services:
 
  # 🌐 Spoolr Frontend Service
   spoolr-frontend:
-    image: athyadw45/spoolr-frontend:latest
+    image: ${DOCKER_USERNAME}/spoolr-frontend:${IMAGE_TAG}
     container_name: spoolr-frontend
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://spoolr-core:8080
-    ports:
-      - "3000:3000"
+    ports: ["127.0.0.1:3000:3000"]
     depends_on:
-      spoolr-core:
-        condition: service_healthy
+      spoolr-core: { condition: service_healthy }
     networks:
       - spoolr-network
 

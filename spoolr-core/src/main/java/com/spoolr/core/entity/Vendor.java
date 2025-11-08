@@ -92,7 +92,7 @@ public class Vendor {
     private String storeCode;  // "PW0001" - unique identifier for QR codes
 
     @Column(name = "qr_code_url")
-    private String qrCodeUrl;  // "https://printwave.com/store/PW0001"
+    private String qrCodeUrl;  // "https://spoolr.tech/store/PW0001"
 
     @Column(name = "enable_direct_orders", nullable = false)
     private Boolean enableDirectOrders = true;  // Allow QR code orders
@@ -155,7 +155,7 @@ public class Vendor {
      */
     public void generateQRCodeUrl() {
         if (storeCode != null) {
-            this.qrCodeUrl = "https://printwave.com/store/" + storeCode;
+            this.qrCodeUrl = "https://spoolr.tech/store/" + storeCode;
         }
     }
 
