@@ -245,6 +245,38 @@ public class EmailService {
             mailSender.send(emailMessage);
         }
     }
+    
+    /**
+     * Send email notification when vendor rejects the job
+     */
+    @Async
+    public void sendJobRejectedEmail(PrintJob job) {
+        // Only send email to registered customers (not anonymous)
+        if (job.getCustomer() != null && job.getCustomer().getEmail() != null) {
+            String vendorName = (job.getVendor() != null) ? job.getVendor().getBusinessName() : "the print shop";
+            
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(job.getCustomer().getEmail());
+            message.setSubject("Spoolr - Searching for Another Vendor 🔍");
+            message.setText("Hello " + job.getCustomer().getName() + ",\n\n" +
+                    vendorName + " was unable to accept your job at this time.\n\n" +
+                    "📄 Job Details:\n" +
+                    "• File: " + job.getOriginalFileName() + "\n" +
+                    "• Tracking Code: " + job.getTrackingCode() + "\n" +
+                    "• Print Specs: " + job.getPrintSpecsSummary() + "\n" +
+                    "• Vendor: " + vendorName + "\n\n" +
+                    "🔍 What's happening now:\n" +
+                    "We're automatically searching for another nearby print shop that can fulfill your order.\n" +
+                    "You'll receive a notification once we find a new vendor.\n\n" +
+                    "ℹ️ Your job is still active and we're working on it!\n" +
+                    "No action is needed from your side.\n\n" +
+                    "Track your job: " + frontendBaseUrl + "/track?code=" + job.getTrackingCode() + "\n\n" +
+                    "Thank you for your patience.\n\n" +
+                    "Spoolr Team");
+
+            mailSender.send(message);
+        }
+    }
 
     /**
      * 🔧 FIXED: Send job ready notification with explicit parameters to avoid Hibernate issues

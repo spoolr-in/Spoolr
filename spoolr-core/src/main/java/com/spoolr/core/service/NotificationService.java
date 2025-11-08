@@ -178,4 +178,17 @@ public class NotificationService {
         // Send Email notification (for registered customers only)
         emailService.sendJobIssueEmail(job, status, message);
     }
+    
+    /**
+     * ❌ Notify customer when vendor rejects the job - both WebSocket and Email
+     */
+    public void notifyCustomerJobRejected(PrintJob job) {
+        String message = "The vendor declined your job. We're searching for another vendor nearby...";
+        
+        // Send WebSocket notification (real-time)
+        notifyCustomerOfStatusUpdate(job.getTrackingCode(), "VENDOR_REJECTED", message);
+        
+        // Send Email notification (for registered customers only)
+        emailService.sendJobRejectedEmail(job);
+    }
 }

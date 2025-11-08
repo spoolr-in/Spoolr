@@ -259,6 +259,10 @@ public class PrintJobService {
         job.setStatus(JobStatus.VENDOR_REJECTED);
         printJobRepository.save(job);
 
+        // 📧 Notify customer that vendor rejected the job (WebSocket + Email)
+        notificationService.notifyCustomerJobRejected(job);
+
+        // Try to find another vendor
         startVendorOfferProcess(job, vendor.getLatitude(), vendor.getLongitude(), List.of(vendor.getId()), null);
 
         return job;
@@ -560,10 +564,19 @@ public class PrintJobService {
                 if (job.getStatus() == JobStatus.READY) {
                     job.setStatus(JobStatus.COMPLETED);
                     job.setCompletedAt(LocalDateTime.now());
-                    printJobRepository.save(job);
+                    PrintJob savedJob = printJobRepository.save(job);
                     
                     // ✅ Enhanced final notification (WebSocket + Email!)
-                    notificationService.notifyCustomerJobCompleted(job);
+                    notificationService.notifyCustomerJobCompleted(savedJob);
+                    
+                    // 🗑️ DELETE DOCUMENT: Remove the file from storage after auto-completion
+                    try {
+                        log.info("Auto-deleting document for completed job {}: {}", jobId, savedJob.getS3ObjectKey());
+                        fileStorageService.deleteFile(savedJob.getS3ObjectKey());
+                        log.info("Successfully auto-deleted document for job {}", jobId);
+                    } catch (Exception deleteEx) {
+                        log.error("Failed to auto-delete document for job {}: {}", jobId, deleteEx.getMessage());
+                    }
                 }
             }
         } catch (Exception e) {
@@ -643,6 +656,17 @@ public class PrintJobService {
         ScheduledFuture<?> pendingTask = scheduledTasks.remove(jobId);
         if (pendingTask != null && !pendingTask.isDone()) {
             pendingTask.cancel(false);
+        }
+        
+        // 🗑️ DELETE DOCUMENT: Remove the file from storage after job completion
+        try {
+            log.info("Deleting document for completed job {}: {}", jobId, savedJob.getS3ObjectKey());
+            fileStorageService.deleteFile(savedJob.getS3ObjectKey());
+            log.info("Successfully deleted document for job {}", jobId);
+        } catch (Exception e) {
+            log.error("Failed to delete document for job {}: {}", jobId, e.getMessage());
+            // Don't fail the completion just because deletion failed
+            // The job is still completed successfully for the customer
         }
         
         return savedJob;
